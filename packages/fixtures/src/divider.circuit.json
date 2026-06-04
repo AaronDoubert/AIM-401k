@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "0.0.1",
+  "components": [
+    {
+      "id": "vsource_1",
+      "level": 1,
+      "symbolId": "sym_vsource",
+      "semanticPorts": [
+        { "id": "pos", "role": "positive" },
+        { "id": "neg", "role": "negative" }
+      ],
+      "params": {
+        "V": { "value": 5, "unit": "V" }
+      }
+    },
+    {
+      "id": "r1",
+      "level": 2,
+      "symbolId": "sym_resistor",
+      "semanticPorts": [
+        { "id": "a", "role": "terminal" },
+        { "id": "b", "role": "terminal" }
+      ],
+      "params": {
+        "R": { "value": 1000, "unit": "Ω" }
+      }
+    },
+    {
+      "id": "r2",
+      "level": 2,
+      "symbolId": "sym_resistor",
+      "semanticPorts": [
+        { "id": "a", "role": "terminal" },
+        { "id": "b", "role": "terminal" }
+      ],
+      "params": {
+        "R": { "value": 1000, "unit": "Ω" }
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": "net_vdd",
+      "name": "VDD",
+      "members": [
+        { "componentId": "vsource_1", "portId": "pos" },
+        { "componentId": "r1", "portId": "a" }
+      ]
+    },
+    {
+      "id": "net_vmid",
+      "name": "vmid",
+      "members": [
+        { "componentId": "r1", "portId": "b" },
+        { "componentId": "r2", "portId": "a" }
+      ]
+    },
+    {
+      "id": "net_gnd",
+      "name": "GND",
+      "members": [
+        { "componentId": "r2", "portId": "b" },
+        { "componentId": "vsource_1", "portId": "neg" }
+      ]
+    }
+  ],
+  "interfaces": [],
+  "description": "Voltage divider: 5V source with two 1kΩ resistors in series. vmid = 2.5V for SPICE OP simulation."
+}

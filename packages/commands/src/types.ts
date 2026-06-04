@@ -44,6 +44,15 @@ export interface LoggedCommand {
   command: Command;
   dependsOn?: string[];
   label?: string;
+  /**
+   * Stored result metadata for deterministic replay.
+   * addComponent stores the assigned component id here.
+   * connect stores the new net id when one was created.
+   */
+  resultMeta?: {
+    newComponentId?: string;
+    newNetId?: string;
+  };
 }
 
 export interface ProjectFile {
