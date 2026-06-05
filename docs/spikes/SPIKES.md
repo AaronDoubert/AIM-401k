@@ -181,10 +181,12 @@ data is fetched from EasyEDA's API — respect their terms for a shared deployme
 - **No stack change required.** All four core libraries (eecircuit-engine,
   circuit-json, kicad-converter/circuit-json-to-gerber, dsn-converter) behave as
   the architecture assumes, at their current 2026 versions.
-- **Design locks to record as ADRs:** (1) sim runs in a **pre-warmed Worker**,
-  ship a real `.wasm`; (2) model extensions are **`condenser_*` sidecar elements**
-  with superset-union validation; (3) part fetch uses **MIT TS ports**, never the
-  AGPL `.py`; (4) "best pins" is a **CSP gated by a cardinality/matching precheck**.
-- **Two unknowns to close opportunistically (both need external access):** a real
-  freerouting `.ses` ingestion test, and a real vision-model pin-table error-rate
-  measurement on ~5 datasheets.
+- **Design locks recorded as ADRs:** [0001](../adr/0001-simulation-in-prewarmed-worker.md)
+  sim in a pre-warmed Worker + real `.wasm`; [0002](../adr/0002-circuit-json-sidecar-extensions.md)
+  `condenser_*` sidecar elements + superset-union validation;
+  [0003](../adr/0003-part-fetch-mit-ports.md) MIT TS part-fetch ports, never the
+  AGPL `.py`; [0004](../adr/0004-best-pins-csp-with-precheck.md) best-pins CSP gated
+  by a cardinality/matching precheck.
+- **Open follow-ups tracked in [`../FOLLOW_UPS.md`](../FOLLOW_UPS.md)**, including the
+  two unknowns that need external access: a real freerouting `.ses` ingestion test,
+  and a real vision-model pin-table error-rate measurement on ~5 datasheets.
