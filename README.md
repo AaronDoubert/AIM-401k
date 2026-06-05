@@ -46,8 +46,35 @@ packages/
 
 ```bash
 pnpm install
+pnpm build      # builds the workspace packages (the app consumes their dist)
 pnpm test
 ```
+
+### Visual prototype (`apps/web`)
+
+A browser-based prototype that drives the deterministic core through a UI:
+
+```bash
+pnpm build      # once, so @condenser/* dist is available
+pnpm dev        # starts the Vite dev server (http://localhost:5173)
+# or: pnpm preview  (serves the production build)
+```
+
+It provides:
+
+- **Level-aware schematic renderer** (SVG): components draw L0→L3 with a fidelity
+  badge, pan / zoom / drag, net routing with power/ground styling, and selection.
+- **Procedures panel** — synthesize an RC low-pass filter and insert it; the UI
+  calls the procedure for every value (the AI/UI never does the arithmetic).
+- **Inspector** with the fidelity ladder, params, obligations, and one-click
+  promotions (attach interface → L1, bind real part → L3).
+- **Command log** with undo/redo, plus project save/load (snapshot + command log).
+- **Agent panel** — an offline, deterministic copilot that builds circuits by
+  calling procedures and issuing validated commands. It works with **no API key**,
+  and an **“enter many kinds of tokens”** settings tab wires up many providers
+  (Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, Mistral, DeepSeek, xAI,
+  Together, Fireworks, Perplexity, Azure OpenAI, Ollama/LM Studio, and any custom
+  OpenAI-compatible endpoint) across three wire formats, with tool-calling.
 
 ## Build Phases
 
