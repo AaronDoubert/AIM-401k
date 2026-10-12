@@ -117,7 +117,7 @@ $("#add").addEventListener("click", async () => {
 const openSetup = () => void send({ type: "openOnboarding" }).then(() => window.close());
 $("#setup").addEventListener("click", openSetup);
 $("#setup").addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && openSetup());
-$("#warroom").addEventListener("click", () => void api.tabs.create({ url: api.runtime.getURL("warroom.html") }).then(() => window.close()));
+$("#warroom").addEventListener("click", () => void send({ type: "openWarRoom" }).then(() => window.close()));
 $("#tracker").addEventListener("click", () => void api.tabs.create({ url: api.runtime.getURL("tracker.html") }).then(() => window.close()));
 $("#options").addEventListener("click", () => void api.runtime.openOptionsPage().then(() => window.close()));
 $<HTMLInputElement>("#ui-plain").addEventListener("change", async (e) => {

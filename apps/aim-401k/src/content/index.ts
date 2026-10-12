@@ -87,7 +87,8 @@ async function main(): Promise<void> {
   if (top) {
     const state = (await send({ type: "getOverlayState" })) as OverlayState | undefined;
     if (state) {
-      overlay = new Overlay();
+      // A broadcast may have created the overlay while we awaited: reuse it (never mount two).
+      overlay ??= new Overlay();
       overlay.update(state);
     }
   }

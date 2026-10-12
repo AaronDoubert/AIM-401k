@@ -34,9 +34,9 @@ export default async function warroom(t) {
   await wr.waitForSelector("body.booted", { timeout: 10000 });
 
   const urls = [
-    `${base}/warroom/apply.html?wr=1&co=Cyberdyne%20Systems&role=Staff%20Autonomy%20Engineer&delay=1200`,
-    `${base}/warroom/apply.html?wr=2&co=Weyland-Yutani&role=Synthetic%20Operations%20Lead&delay=1800&consent=1`,
-    `${base}/warroom/apply.html?wr=3&co=Tyrell%20Corporation&role=Replicant%20UX%20Researcher&delay=3400`,
+    `${base}/warroom/apply.html?wr=1&co=Rekall%20Incorporated&role=Staff%20Autonomy%20Engineer&delay=1200`,
+    `${base}/warroom/apply.html?wr=2&co=Omni%20Consumer%20Products&role=Synthetic%20Operations%20Lead&delay=1800&consent=1`,
+    `${base}/warroom/apply.html?wr=3&co=Gekko%20%26%20Co&role=Replicant%20UX%20Researcher&delay=3400`,
   ];
 
   try {

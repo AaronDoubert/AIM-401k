@@ -6,15 +6,14 @@ import { join } from "node:path";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const key = (c) => String(c ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const APPLIED = ["submitted", "interviewing", "offer", "rejected"];
 
 export default async function ({ ctx, ext, extId, base, msg, store, waitFor, check, sleep, shots, fixtures }) {
-  /** A real submitted job whose company no other applied job shares (else make one). */
-  async function pickTarget(exclude, fallbackCompany) {
-    const jobs = (await store()).jobs ?? [];
-    const sameCo = (j) => jobs.filter((o) => o !== j && key(o.company) === key(j.company) && (APPLIED.includes(o.status) || o.appliedAt));
-    const real = jobs.find((j) => j.status === "submitted" && j.company && !exclude.includes(key(j.company)) && !sameCo(j).length);
-    if (real) return real;
+  /**
+   * A submitted job this suite owns. Suites share one browser profile, so we
+   * never borrow another suite's job (moving it to "interviewing" would break
+   * the suites that run after us).
+   */
+  async function pickTarget(_exclude, fallbackCompany) {
     const url = `${base}/posting.html?intel=${key(fallbackCompany)}`;
     await msg({ type: "addJobs", urls: [url], start: false });
     const made = (await store()).jobs.find((j) => j.url === url);
@@ -26,7 +25,7 @@ export default async function ({ ctx, ext, extId, base, msg, store, waitFor, che
   const pages = [];
 
   // --- 1. Gmail tab: an interview request from a company we applied to -------
-  const target = await pickTarget([], "Kramerica Industries");
+  const target = await pickTarget([], "Vault-Tec Industries");
   console.log(`   target job: ${target.company} · ${target.title} (${target.status})`);
   const gmailTitle = now.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
   const gmailTime = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -111,7 +110,7 @@ export default async function ({ ctx, ext, extId, base, msg, store, waitFor, che
   await ext.locator("#intel-feed").screenshot({ path: join(shots, "intel-feed.png") }).catch(() => {});
 
   // --- 4. Direct ingest: a rejection, then the same mail again -----------------
-  const target2 = await pickTarget([key(target.company)], "Bania Comedy");
+  const target2 = await pickTarget([key(target.company)], "Nakatomi Trading");
   const rejection = {
     messageId: "e2e-rejection-1",
     from: `${target2.company} Talent`,

@@ -191,7 +191,7 @@ export const PLAIN: Record<keyof typeof CHUD, string> = {
   "warroom.units.empty": "Nothing in progress",
   "warroom.units.empty_sub": "Paste job links to start applying.",
   "warroom.units.hint": "Click a card to open its tab",
-  "warroom.tile.meta": "Tab {unit}",
+  "warroom.tile.meta": "Tab {unit} · Job {tgt}",
   "warroom.tile.untitled": "Untitled job",
   "warroom.tile.lock": "Filling",
   "warroom.tile.acquiring": "Working…",
