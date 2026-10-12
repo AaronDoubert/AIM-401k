@@ -4,7 +4,9 @@ import type { GmailStatus } from "../background/gmail";
 import type { SyncResult } from "../background/intel";
 import { api } from "../shared/api";
 import { normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
+import { preset } from "../shared/providers";
 import type { IntelSettings, Settings } from "../shared/types";
+import { requestAiConsent } from "./aiSetup";
 import { h, send, toast } from "./common";
 
 type Ctx = { box: HTMLElement; settings: Settings; onChange: () => void };
@@ -51,6 +53,18 @@ function toggle(label: string, key: "gmailTab" | "outlookTab" | "autoStatus" | "
   input.addEventListener("change", () => {
     c.settings.intel[key] = input.checked;
     c.onChange();
+    // Sorting email with an online AI shares email contents: ask Firefox's
+    // built-in data consent for that (must start inside the click handler).
+    if (key === "useAi" && input.checked) {
+      const p = preset(c.settings.aiProvider);
+      const baseUrl = c.settings.aiProvider === "custom" || c.settings.aiProvider === "ollama" ? c.settings.customBaseUrl || p.baseUrl : p.baseUrl;
+      void requestAiConsent(c.settings.aiProvider, baseUrl, ["personalCommunications"]).then((ok) => {
+        if (ok) return;
+        input.checked = false;
+        c.settings.intel.useAi = false;
+        c.onChange();
+      });
+    }
   });
   return h("label", { className: "f check wide" }, input, h("span", {}, label, hint ? h("span", { className: "muted", textContent: ` ${hint}` }) : ""));
 }

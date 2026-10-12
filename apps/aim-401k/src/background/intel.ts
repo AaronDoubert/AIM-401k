@@ -91,7 +91,7 @@ Only use the text given. If unsure, answer "other".`;
 async function aiClassify(s: Settings, m: RawMail): Promise<{ kind: IntelKind; company: string } | null> {
   try {
     const prompt = `From: ${m.from} <${m.fromEmail}>\nSubject: ${m.subject}\nPreview: ${m.snippet}`;
-    return await completeJson(s, { schema: AiVerdict, system: AI_SYSTEM, context: [], prompt, maxTokens: 400 });
+    return await completeJson(s, { schema: AiVerdict, system: AI_SYSTEM, context: [], prompt, maxTokens: 400, consent: ["personalCommunications"] });
   } catch {
     return null; // AI is a helper: fall back to the keyword result
   }

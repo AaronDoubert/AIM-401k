@@ -20,6 +20,8 @@ export interface AiTask<T> {
   context: string[];
   prompt: string;
   maxTokens?: number;
+  /** Extra Firefox data-collection consents this task needs (e.g. email contents). */
+  consent?: string[];
 }
 
 interface Resolved {
@@ -240,7 +242,7 @@ export async function completeJson<T>(s: Settings, task: AiTask<T>, override?: P
   const r = resolveProvider(s, override);
   if (preset(r.provider).needsKey && !r.key) throw new AiError(`Add a ${preset(r.provider).name} API key in Settings → AI`);
   if (!r.model) throw new AiError("Pick a model in Settings → AI");
-  if (!(await aiConsentGranted(r))) {
+  if (!(await aiConsentGranted(r, task.consent))) {
     throw new AiError(
       `Firefox hasn't been given permission to share your data with ${preset(r.provider).name}. Click “Test & load models” in Settings → AI to allow it, or allow it under about:addons → AIM-401k → Permissions.`,
     );
@@ -254,7 +256,7 @@ export async function completeJson<T>(s: Settings, task: AiTask<T>, override?: P
  * Browsers without built-in consent (Chromium, older Firefox) report no
  * `data_collection` and aren't gated; their consent is the explicit AI opt-in.
  */
-export async function aiConsentGranted(r: Pick<Resolved, "provider" | "baseUrl">): Promise<boolean> {
+export async function aiConsentGranted(r: Pick<Resolved, "provider" | "baseUrl">, extra: string[] = []): Promise<boolean> {
   if (isLocalAi(r.provider, r.baseUrl)) return true;
   const g = globalThis as unknown as { browser?: typeof browser; chrome?: typeof browser };
   const perms = (g.browser ?? g.chrome)?.permissions;
@@ -263,7 +265,7 @@ export async function aiConsentGranted(r: Pick<Resolved, "provider" | "baseUrl">
     const all = await perms.getAll();
     if (!all || !("data_collection" in all)) return true;
     const granted = new Set<string>(all.data_collection ?? []);
-    return AI_DATA_CONSENT.every((c) => granted.has(c));
+    return [...AI_DATA_CONSENT, ...extra].every((c) => granted.has(c));
   } catch {
     return true;
   }
