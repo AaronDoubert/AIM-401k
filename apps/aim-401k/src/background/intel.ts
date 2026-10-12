@@ -10,7 +10,7 @@ import { normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
 import type { IntelItem, IntelKind, IntelSource, Job, JobStatus, OpsEvent, Profile, RawMail, Settings } from "../shared/types";
 import { truncate, uid } from "../shared/util";
 import { aiReady, completeJson } from "./ai";
-import { ACTIVE, broadcast, clearNeeds, desktopNotify, emit, log, opsLog, pump, register, toPages } from "./core";
+import { ACTIVE, broadcast, clearNeeds, desktopNotify, emit, fromExtensionPage, log, opsLog, pump, register, toPages } from "./core";
 import * as gmail from "./gmail";
 import { getState, mutate, type State } from "./store";
 import { redactText } from "./tasks";
@@ -426,7 +426,7 @@ async function disconnect(): Promise<boolean> {
 register({
   intelIngest: (msg, sender) => {
     // From a content script, the source is whatever mail site the tab is really on.
-    if (sender.tab) {
+    if (sender.tab && !fromExtensionPage(sender)) {
       const source = mailSourceFor(sender.tab.url ?? sender.url ?? "");
       if (!source) return { enabled: false, added: 0, matched: 0, updated: 0 };
       return ingest(source, msg.mails);

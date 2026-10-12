@@ -21,6 +21,11 @@ export function register(handlers: Handlers): void {
   Object.assign(registry, handlers);
 }
 
+/** Sent by one of the extension's own pages (popup, options, tracker, War Room), not a content script. */
+export function fromExtensionPage(sender: Sender): boolean {
+  return !!sender.url && sender.url.startsWith(api.runtime.getURL(""));
+}
+
 export function dispatch(msg: ToBackground, sender: Sender): unknown {
   const fn = registry[msg.type] as ((m: ToBackground, s: Sender) => unknown) | undefined;
   return fn ? fn(msg, sender) : undefined;

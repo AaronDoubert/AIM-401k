@@ -12,6 +12,7 @@ import {
   closeTabLater,
   dispatch,
   emit,
+  fromExtensionPage,
   log,
   newJob,
   notify,
@@ -432,10 +433,6 @@ const FROM_CONTENT = new Set<ToBackground["type"]>([
   "setPaused",
   "intelIngest",
 ]);
-
-export function fromExtensionPage(sender: Sender): boolean {
-  return !!sender.url && sender.url.startsWith(api.runtime.getURL(""));
-}
 
 api.runtime.onMessage.addListener((raw: unknown, sender: Sender, sendResponse: (r: unknown) => void) => {
   const msg = raw as ToBackground;
