@@ -167,10 +167,11 @@ export type ParsedResume = z.infer<typeof ParsedResume>;
 const RESUME_SYSTEM = `You convert resume text into structured profile data.
 Copy facts exactly as written; never guess or embellish. Use "" for anything not present. List jobs and schools most recent first. Dates: YYYY-MM (or YYYY when only a year is given); a job with "Present"/"Current" has current=true and endDate "".`;
 
-export async function parseResumeWithAi(text: string, settings: Settings): Promise<ParsedResume> {
-  // With the privacy guard on, the model reads a scrubbed copy; email and phone
-  // are then filled back in from the original text, locally.
-  const sent = settings.aiRedact ? redactText(text) : text;
+export async function parseResumeWithAi(text: string, settings: Settings, profile?: Partial<Profile>): Promise<ParsedResume> {
+  // With the privacy guard on, the model reads a scrubbed copy (email, phone, and the
+  // street/postal code already known from the profile); contact details are then
+  // filled back in from the original text, locally.
+  const sent = settings.aiRedact ? redactText(text, profile) : text;
   const out = await completeJson(settings, {
     schema: ParsedResume,
     system: RESUME_SYSTEM,

@@ -6,6 +6,7 @@ import type { AnswerEntry, Job, Profile, Settings } from "../shared/types";
 import { uid } from "../shared/util";
 import { renderAiSetup } from "./aiSetup";
 import { copy } from "../shared/copy";
+import { mergeById, mergeEdits, snapshot } from "../shared/merge";
 import { $, applyCopy, download, h, send, setUi, toast } from "./common";
 import { extractResume, fileToBase64 } from "./extract";
 import { renderIntelSettings } from "./intelSettings";
@@ -31,6 +32,12 @@ let profile: Profile;
 let settings: Settings;
 let answers: AnswerEntry[] = [];
 let dirty = false;
+// What this page loaded (or last saved): saves write only the differences, so
+// changes made elsewhere meanwhile (AFK, units, Gmail, forgotten keys, answers
+// remembered from the overlay) survive.
+let baseProfile: Profile;
+let baseSettings: Settings;
+let baseAnswers: AnswerEntry[] = [];
 
 function markDirty(): void {
   dirty = true;
@@ -110,18 +117,36 @@ async function load(): Promise<void> {
   profile = normalizeProfile(raw.profile);
   settings = normalizeSettings(raw.settings);
   answers = raw.answers ?? [];
+  baseProfile = snapshot(profile);
+  baseSettings = snapshot(settings);
+  baseAnswers = snapshot(answers);
   applyCopy(settings);
   renderForms();
   renderAnswers();
 }
 
 async function save(): Promise<void> {
-  // Don't clobber the pause toggle or the interface toggles, which other pages own too.
-  const cur = normalizeSettings(((await api.storage.local.get(STORAGE_KEYS.settings)) as { settings?: unknown }).settings);
+  const raw = (await api.storage.local.get([STORAGE_KEYS.profile, STORAGE_KEYS.settings, STORAGE_KEYS.answers])) as {
+    profile?: unknown;
+    settings?: unknown;
+    answers?: AnswerEntry[];
+  };
   const cleaned = answers.filter((a) => a.question.trim() && a.answer.trim());
-  settings.ui = cur.ui;
-  await api.storage.local.set({ profile, settings: { ...settings, paused: cur.paused, ui: cur.ui }, answers: cleaned });
-  answers = cleaned;
+  const nextProfile = mergeEdits(baseProfile, profile, normalizeProfile(raw.profile));
+  const nextSettings = mergeEdits(baseSettings, settings, normalizeSettings(raw.settings));
+  const nextAnswers = mergeById(baseAnswers, cleaned, raw.answers ?? []);
+  await api.storage.local.set({ profile: nextProfile, settings: nextSettings, answers: nextAnswers });
+  // Adopt what was merged in from elsewhere into the page's own objects (form controls are
+  // bound to them), re-rendering only if something actually came in.
+  const external = JSON.stringify(nextProfile) !== JSON.stringify(profile) || JSON.stringify(nextSettings) !== JSON.stringify(settings);
+  Object.assign(profile, nextProfile);
+  Object.assign(settings, nextSettings);
+  answers = nextAnswers;
+  baseProfile = snapshot(profile);
+  baseSettings = snapshot(settings);
+  baseAnswers = snapshot(answers);
+  if (external) renderForms();
+  renderAnswers();
   dirty = false;
   $("#dirty").textContent = "";
   toast(copy(settings, "theme.toast.saved"));

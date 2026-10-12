@@ -180,7 +180,9 @@ export function renderAiSetup(box: Element, settings: Settings, onChange: () => 
     const test = h("button", { type: "button", className: "primary", textContent: "Test & load models" });
     runTest = async () => {
       // First thing, while the click's user activation is still valid.
-      const consent = requestAiConsent(p.id, p.id === "custom" || p.id === "ollama" ? baseInput.value.trim() || p.baseUrl : p.baseUrl);
+      // If AI email sorting is on, this provider will also see email subjects/previews.
+      const extra = settings.intel?.useAi ? ["personalCommunications"] : [];
+      const consent = requestAiConsent(p.id, p.id === "custom" || p.id === "ollama" ? baseInput.value.trim() || p.baseUrl : p.baseUrl, extra);
       test.disabled = true;
       status.textContent = "Testing…";
       status.className = "muted status";

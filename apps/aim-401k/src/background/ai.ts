@@ -37,7 +37,9 @@ export function resolveProvider(s: Settings, override?: Partial<Resolved>): Reso
   const baseUrl = (override?.baseUrl ?? (provider === "custom" || (provider === "ollama" && s.customBaseUrl) ? s.customBaseUrl : p.baseUrl)).replace(/\/+$/, "");
   return {
     provider,
-    key: cleanApiKey(override?.key ?? s.apiKeys[provider] ?? ""),
+    // A stored key is only ever paired with that provider's own endpoint: an override
+    // pointing somewhere else must bring its own key (never leak a key to another host).
+    key: cleanApiKey(override?.key ?? (override?.baseUrl !== undefined ? "" : (s.apiKeys[provider] ?? ""))),
     model: override?.model ?? s.models[provider] ?? p.defaultModel,
     baseUrl: baseUrl || p.baseUrl,
   };

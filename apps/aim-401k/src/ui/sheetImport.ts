@@ -598,8 +598,8 @@ async function doImport(): Promise<void> {
       return renderSummary();
     }
     if (p.create.length) await send({ type: "importJobs", jobs: p.create });
-    // JobPatch may carry appliedAt (from the sheet); updateJob assigns patch fields as given.
-    for (const u of p.update) await send({ type: "updateJob", jobId: u.jobId, patch: u.patch });
+    // One batched message: a re-import can touch hundreds of rows.
+    if (p.update.length) await send({ type: "updateJobs", updates: p.update.map((u) => ({ jobId: u.jobId, patch: u.patch })) });
     if (p.create.some((j) => j.status === "queued") || p.update.some((u) => u.patch.status === "queued")) await send({ type: "kick" });
     remember(v);
     toast(t("sheet.toast.done", { create: p.create.length, update: p.update.length }));

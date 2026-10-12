@@ -7,12 +7,13 @@ import { classify, type Classification, fingerprint, guessCompany, looksJobRelat
 import { api } from "../shared/api";
 import { copy, type CopyKey } from "../shared/copy";
 import { normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
-import type { IntelItem, IntelKind, IntelSource, Job, JobStatus, OpsEvent, RawMail, Settings } from "../shared/types";
+import type { IntelItem, IntelKind, IntelSource, Job, JobStatus, OpsEvent, Profile, RawMail, Settings } from "../shared/types";
 import { truncate, uid } from "../shared/util";
 import { aiReady, completeJson } from "./ai";
 import { ACTIVE, broadcast, clearNeeds, desktopNotify, emit, log, opsLog, pump, register, toPages } from "./core";
 import * as gmail from "./gmail";
 import { getState, mutate, type State } from "./store";
+import { redactText } from "./tasks";
 
 const INTEL_CAP = 500;
 /** Same cap core.ts's opsLog applies to the ops log. */
@@ -36,11 +37,32 @@ export interface IngestResult {
 const kindLabel = (s: Settings, k: IntelKind) => copy(s, `intel.kind.${k}` as CopyKey);
 const dedupeKey = (source: IntelSource, id: string) => `${source.startsWith("gmail") ? "gmail" : source}:${id}`;
 
-/** Mail we classified as noise this session, so it isn't re-classified (or sent to AI) on every scan. */
+/**
+ * Mail we classified as noise, so it isn't re-classified (or re-sent to the AI)
+ * on every scan. Persisted: Firefox suspends the background page when idle, and
+ * an in-memory set would be empty again at every Gmail sync.
+ */
+const DROPPED_KEY = "intelDropped";
 const dropped = new Set<string>();
+let droppedLoaded: Promise<void> | null = null;
+let droppedSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function loadDropped(): Promise<void> {
+  droppedLoaded ??= api.storage.local
+    .get(DROPPED_KEY)
+    .then((r) => {
+      const list = (r as Record<string, unknown>)[DROPPED_KEY];
+      if (Array.isArray(list)) for (const k of list) if (typeof k === "string") dropped.add(k);
+    })
+    .catch(() => undefined);
+  return droppedLoaded;
+}
+
 function drop(key: string): void {
   dropped.add(key);
   if (dropped.size > 3000) dropped.delete(dropped.values().next().value!);
+  if (droppedSaveTimer) clearTimeout(droppedSaveTimer);
+  droppedSaveTimer = setTimeout(() => void api.storage.local.set({ [DROPPED_KEY]: [...dropped] }).catch(() => undefined), 500);
 }
 
 function sourceEnabled(s: Settings, source: IntelSource): boolean {
@@ -88,13 +110,30 @@ const AI_SYSTEM = `You sort a job seeker's emails. Given one email's sender, sub
 - other: anything else (newsletters, job alerts, marketing, unrelated mail)
 Only use the text given. If unsure, answer "other".`;
 
-async function aiClassify(s: Settings, m: RawMail): Promise<{ kind: IntelKind; company: string } | null> {
+async function aiClassify(s: Settings, m: RawMail, profile?: Partial<Profile>): Promise<{ kind: IntelKind; company: string } | null> {
   try {
-    const prompt = `From: ${m.from} <${m.fromEmail}>\nSubject: ${m.subject}\nPreview: ${m.snippet}`;
+    // Privacy guard: the sender's domain is enough to tell the company; the user's own
+    // contact details (and anyone's emails/phones) are scrubbed from the text.
+    const scrub = (t: string) => (s.aiRedact ? redactText(t, profile) : t);
+    const from = s.aiRedact ? `${scrub(m.from)} <…@${m.fromEmail.split("@")[1] ?? ""}>` : `${m.from} <${m.fromEmail}>`;
+    const prompt = `From: ${from}\nSubject: ${scrub(m.subject)}\nPreview: ${scrub(m.snippet)}`;
     return await completeJson(s, { schema: AiVerdict, system: AI_SYSTEM, context: [], prompt, maxTokens: 400, consent: ["personalCommunications"] });
   } catch {
     return null; // AI is a helper: fall back to the keyword result
   }
+}
+
+/** Which tab reader a page URL belongs to (null for anything that isn't Gmail/Outlook web). */
+export function mailSourceFor(url: string): "gmail-tab" | "outlook-tab" | null {
+  let host = "";
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return null;
+  }
+  if (host === "mail.google.com") return "gmail-tab";
+  if (host === "outlook.live.com" || host === "outlook.office.com" || host === "outlook.office365.com") return "outlook-tab";
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,11 +145,24 @@ interface Change {
   to: JobStatus;
 }
 
-/** Move the job's status as the email implies (if autoStatus). Returns the change, if any. */
-function applyStatus(s: State, item: IntelItem): Change | null {
+/**
+ * Move the job's status as the email implies (if autoStatus). Returns the change, if any.
+ * `confirmed` = the user assigned the email themselves, which skips the evidence checks.
+ */
+function applyStatus(s: State, item: IntelItem, opts: { strong: boolean; confirmed: boolean }): Change | null {
   if (!item.jobId || !s.settings.intel.autoStatus) return null;
   const job = s.jobs.find((j) => j.id === item.jobId);
   if (!job) return null;
+  if (!opts.confirmed) {
+    // Never let mail steer an application AIM-401k is about to make or is making
+    // (e.g. Workday's "thanks for your interest" account mail arrives mid-fill).
+    if (ACTIVE.includes(job.status) || job.status === "queued") return null;
+    // Mail from before this application is about something else (an older role).
+    const since = (job.appliedAt ?? job.createdAt) - 2 * 86_400_000;
+    if (item.receivedAt && item.receivedAt < since) return null;
+    // Rejections and offers need the sender to vouch for the company, not just a display name.
+    if ((item.kind === "rejection" || item.kind === "offer") && !opts.strong) return null;
+  }
   const to = nextStatus(job.status, item.kind);
   if (!to) return null;
   const from = job.status;
@@ -155,6 +207,7 @@ async function notifyItems(s: Settings, items: IntelItem[], jobs: Job[]): Promis
 
 /** Classify, match, store and act on a batch of mail from one source. */
 export async function ingest(source: IntelSource, raw: unknown): Promise<IngestResult> {
+  await loadDropped();
   const s0 = await getState();
   if (!sourceEnabled(s0.settings, source)) return { enabled: false, added: 0, matched: 0, updated: 0 };
   // Oldest first, so a later rejection wins over an earlier "received".
@@ -175,7 +228,7 @@ export async function ingest(source: IntelSource, raw: unknown): Promise<IngestR
     let hint = "";
     if (c.confidence < WEAK && useAi && aiBudget > 0 && (fromKnownCompany || looksJobRelated(m, s0.jobs))) {
       aiBudget--;
-      const ai = await aiClassify(s0.settings, m);
+      const ai = await aiClassify(s0.settings, m, s0.profile);
       if (ai) {
         c = { kind: ai.kind, confidence: 0.7 };
         hint = ai.company.trim().slice(0, 80);
@@ -209,7 +262,7 @@ export async function ingest(source: IntelSource, raw: unknown): Promise<IngestR
         applied: false,
       };
       if (c.confidence >= WEAK) {
-        const ch = applyStatus(s, item);
+        const ch = applyStatus(s, item, { strong: !!match?.strong, confirmed: false });
         if (ch) changes.push(ch);
       }
       s.intel.push(item);
@@ -256,7 +309,7 @@ async function assign(intelId: string, jobId: string | null): Promise<{ ok: bool
     item.jobId = job.id;
     item.company = job.company || item.company;
     item.applied = false;
-    change = applyStatus(s, item); // the user confirmed the match: confidence doesn't matter
+    change = applyStatus(s, item, { strong: true, confirmed: true }); // the user confirmed the match
     return { s, item };
   });
   if (!res) return { ok: false };
@@ -321,6 +374,7 @@ async function runSync(): Promise<SyncResult> {
   try {
     const state = await getState();
     const known = new Set(state.intel.filter((i) => i.source.startsWith("gmail")).map((i) => i.messageId));
+    await loadDropped();
     for (const k of dropped) if (k.startsWith("gmail:")) known.add(k.slice(6));
     const mails = await gmail.fetchRecent(tok.token, known);
     const r = await ingest("gmail-api", mails);
@@ -370,7 +424,15 @@ async function disconnect(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 register({
-  intelIngest: (msg) => ingest(msg.source, msg.mails),
+  intelIngest: (msg, sender) => {
+    // From a content script, the source is whatever mail site the tab is really on.
+    if (sender.tab) {
+      const source = mailSourceFor(sender.tab.url ?? sender.url ?? "");
+      if (!source) return { enabled: false, added: 0, matched: 0, updated: 0 };
+      return ingest(source, msg.mails);
+    }
+    return ingest(msg.source, msg.mails);
+  },
   getIntel: async () => (await getState()).intel,
   intelAssign: (msg) => assign(msg.intelId, msg.jobId),
   intelSync: () => syncGmail(),

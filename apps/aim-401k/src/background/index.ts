@@ -1,7 +1,8 @@
 import { upsertAnswer } from "../core/answerBank";
 import { api } from "../shared/api";
-import type { ContentContext, ToBackground, ToContent } from "../shared/messages";
+import type { ContentContext, JobPatch, ToBackground, ToContent } from "../shared/messages";
 import type { Need } from "../shared/types";
+import { frameMayFill } from "../shared/frames";
 import { uid } from "../shared/util";
 import { listModels, testConnection } from "./ai";
 import {
@@ -22,7 +23,7 @@ import {
   statusFromNeeds,
   toTab,
 } from "./core";
-import { getState, mutate } from "./store";
+import { getState, mutate, type State } from "./store";
 import { draftAnswer, parseResumeWithAi } from "./tasks";
 // Feature modules register their own handlers / listeners on import.
 import "./data";
@@ -33,14 +34,45 @@ import "./units";
 // ---------------------------------------------------------------------------
 // message handling
 
+/**
+ * Apply a manual edit from the tracker/board/sheet import. Taking a job that's
+ * mid-application out of the active states detaches it from its tab so the
+ * autopilot stops (and its next report can't undo the move). Returns a tab to
+ * close, if the runner opened one and the job is being abandoned.
+ */
+function patchJob(s: State, jobId: string, patch: JobPatch): number | null {
+  const job = s.jobs.find((j) => j.id === jobId);
+  if (!job) return null;
+  const { status, ...rest } = patch;
+  Object.assign(job, rest);
+  let close: number | null = null;
+  if (status && status !== job.status) {
+    if (!ACTIVE.includes(status)) clearNeeds(s, job.id);
+    if (status === "submitted" && !job.appliedAt) job.appliedAt = Date.now();
+    if (ACTIVE.includes(job.status) && !ACTIVE.includes(status) && job.tabId != null) {
+      // Keep the tab open when the user says it's applied (they may be looking at it).
+      if (job.autoTab && status !== "submitted") close = job.tabId;
+      job.tabId = null;
+      if (status === "failed" || status === "skipped") emit("lost", { job, why: "stood down" });
+    }
+    log(job, `Status → ${status}`);
+    emit("status", { job, from: job.status, to: status });
+    job.status = status;
+  }
+  job.updatedAt = Date.now();
+  return close;
+}
+
 async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
   const tabId = sender.tab?.id;
   switch (msg.type) {
     case "hello": {
       const s = await getState();
       const job = tabId != null ? s.jobs.find((j) => j.tabId === tabId && ACTIVE.includes(j.status)) : undefined;
-      // Only managed job tabs get the profile (it includes the resume file).
+      // Only managed job tabs get the profile (it includes the resume file), and within
+      // them only the page itself, same-site frames and known ATS frames.
       if (!job) return { managed: false } satisfies Partial<ContentContext>;
+      if (!frameMayFill(sender.url ?? msg.url, sender.tab?.url ?? "", sender.frameId ?? 0)) return { managed: false } satisfies Partial<ContentContext>;
       const ctx: ContentContext = {
         managed: true,
         jobId: job.id,
@@ -114,6 +146,10 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
 
     case "draft": {
       const s = await getState();
+      // Only tabs that are filling an application may spend the user's AI quota.
+      if (tabId != null && !s.jobs.some((j) => j.tabId === tabId && ACTIVE.includes(j.status))) {
+        return { answer: null, needsHuman: true, reason: "Not an application tab" };
+      }
       return draftAnswer(msg.req, s.profile, s.answers, s.settings);
     }
 
@@ -304,21 +340,17 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
       return true;
     }
 
-    case "updateJob": {
+    case "updateJob":
+    case "updateJobs": {
+      const updates = msg.type === "updateJob" ? [{ jobId: msg.jobId, patch: msg.patch }] : msg.updates;
+      const close: number[] = [];
       await mutate((s) => {
-        const job = s.jobs.find((j) => j.id === msg.jobId);
-        if (!job) return;
-        const { status, ...rest } = msg.patch;
-        Object.assign(job, rest);
-        if (status && status !== job.status) {
-          if (!ACTIVE.includes(status)) clearNeeds(s, job.id);
-          if (status === "submitted" && !job.appliedAt) job.appliedAt = Date.now();
-          log(job, `Status → ${status}`);
-          emit("status", { job, from: job.status, to: status });
-          job.status = status;
+        for (const u of updates) {
+          const t = patchJob(s, u.jobId, u.patch);
+          if (t != null) close.push(t);
         }
-        job.updatedAt = Date.now();
       });
+      for (const t of close) void api.tabs.remove(t).catch(() => undefined);
       broadcast();
       void pump();
       return true;
@@ -366,7 +398,8 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
 
     case "parseResume":
       try {
-        return { ok: true, data: await parseResumeWithAi(msg.text, (await getState()).settings) };
+        const st = await getState();
+        return { ok: true, data: await parseResumeWithAi(msg.text, st.settings, st.profile) };
       } catch (e) {
         return { ok: false, message: e instanceof Error ? e.message : String(e) };
       }
@@ -381,8 +414,36 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
 }
 
 // sendResponse + `return true` works in both Firefox and Chromium.
+// Messages content scripts may send. Everything else (settings, data wipes, AI
+// tests, Gmail, imports…) is accepted only from the extension's own pages.
+const FROM_CONTENT = new Set<ToBackground["type"]>([
+  "hello",
+  "report",
+  "progress",
+  "draft",
+  "unit",
+  "getOverlayState",
+  "answerNeed",
+  "dismissNeed",
+  "focusJob",
+  "submitJob",
+  "skipJob",
+  "retryJob",
+  "setPaused",
+  "intelIngest",
+]);
+
+export function fromExtensionPage(sender: Sender): boolean {
+  return !!sender.url && sender.url.startsWith(api.runtime.getURL(""));
+}
+
 api.runtime.onMessage.addListener((raw: unknown, sender: Sender, sendResponse: (r: unknown) => void) => {
-  handle(raw as ToBackground, sender).then(sendResponse, (e) => sendResponse({ error: String(e) }));
+  const msg = raw as ToBackground;
+  if (!msg || typeof msg.type !== "string" || (!fromExtensionPage(sender) && !FROM_CONTENT.has(msg.type))) {
+    sendResponse({ error: "not allowed from this context" });
+    return false;
+  }
+  handle(msg, sender).then(sendResponse, (e) => sendResponse({ error: String(e) }));
   return true;
 });
 

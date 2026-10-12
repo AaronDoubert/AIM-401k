@@ -22,7 +22,7 @@ export function detectAts(host = location.hostname): string {
 }
 
 /** Hosts that commonly embed the real application form in an iframe. */
-export const ATS_FRAME_RE = /greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|icims\.com|jobvite\.com|workable\.com/;
+export { ATS_FRAME_RE } from "../shared/frames";
 
 function metaContent(name: string): string {
   const el = document.querySelector<HTMLMetaElement>(`meta[property="${name}"], meta[name="${name}"]`);

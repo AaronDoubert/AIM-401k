@@ -1,5 +1,8 @@
 import type { AnswerEntry, IntelItem, IntelSource, Job, Need, NeedKind, OpsEvent, PageMeta, Profile, ProviderId, RawMail, Settings, UnitState } from "./types";
 
+/** Fields the tracker, board and spreadsheet import may edit on a job. */
+export type JobPatch = Partial<Pick<Job, "status" | "notes" | "company" | "title" | "location" | "appliedAt">>;
+
 /** A need as reported by a content script (ids/timestamps assigned by background). */
 export interface NeedInput {
   kind: NeedKind;
@@ -65,7 +68,8 @@ export type ToBackground =
   | { type: "adoptTab"; tabId: number }
   | { type: "markApplied"; tabId: number }
   | { type: "setPaused"; paused: boolean }
-  | { type: "updateJob"; jobId: string; patch: Partial<Pick<Job, "status" | "notes" | "company" | "title" | "location" | "appliedAt">> }
+  | { type: "updateJob"; jobId: string; patch: JobPatch }
+  | { type: "updateJobs"; updates: { jobId: string; patch: JobPatch }[] }
   | { type: "deleteJobs"; jobIds: string[] }
   | { type: "importJobs"; jobs: Job[] }
   | { type: "kick" }

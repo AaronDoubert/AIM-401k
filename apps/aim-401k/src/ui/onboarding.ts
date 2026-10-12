@@ -1,6 +1,7 @@
 import { mergeResume, type ResumeData } from "../core/resumeParse";
 import { api } from "../shared/api";
 import { normalizeProfile, normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
+import { mergeEdits, snapshot } from "../shared/merge";
 import type { AnswerEntry, Profile, Settings } from "../shared/types";
 import { renderAiSetup } from "./aiSetup";
 import { copy, type CopyKey } from "../shared/copy";
@@ -12,6 +13,10 @@ let profile: Profile;
 let settings: Settings;
 let step = 0;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+// Autosave writes only what this page changed since load/last save (see shared/merge.ts),
+// so it can't undo changes made in Settings, the War Room or the privacy panel meanwhile.
+let baseProfile: Profile;
+let baseSettings: Settings;
 const steps = Array.from(document.querySelectorAll<HTMLElement>("section.step"));
 const c = (key: CopyKey, vars?: Record<string, string | number>) => copy(settings, key, vars);
 
@@ -19,6 +24,8 @@ async function load(): Promise<void> {
   const raw = (await api.storage.local.get([STORAGE_KEYS.profile, STORAGE_KEYS.settings])) as { profile?: unknown; settings?: unknown };
   profile = normalizeProfile(raw.profile);
   settings = normalizeSettings(raw.settings);
+  baseProfile = snapshot(profile);
+  baseSettings = snapshot(settings);
   applyCopy(settings);
 }
 
@@ -32,10 +39,17 @@ function changed(): void {
 async function save(): Promise<void> {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
-  // Keep the runner's pause flag and the interface toggles; everything else on these pages is ours.
-  const cur = normalizeSettings(((await api.storage.local.get(STORAGE_KEYS.settings)) as { settings?: unknown }).settings);
-  settings.ui = cur.ui;
-  await api.storage.local.set({ profile, settings: { ...settings, paused: cur.paused, ui: cur.ui } });
+  const raw = (await api.storage.local.get([STORAGE_KEYS.profile, STORAGE_KEYS.settings])) as { profile?: unknown; settings?: unknown };
+  const nextProfile = mergeEdits(baseProfile, profile, normalizeProfile(raw.profile));
+  const nextSettings = mergeEdits(baseSettings, settings, normalizeSettings(raw.settings));
+  await api.storage.local.set({ profile: nextProfile, settings: nextSettings });
+  // Keep the page's objects (form controls are bound to them); adopt outside changes key by key.
+  for (const [k, v] of Object.entries(nextSettings)) (settings as unknown as Record<string, unknown>)[k] = v;
+  for (const [k, v] of Object.entries(nextProfile)) {
+    if (JSON.stringify((profile as unknown as Record<string, unknown>)[k]) !== JSON.stringify(v)) (profile as unknown as Record<string, unknown>)[k] = v;
+  }
+  baseProfile = snapshot(profile);
+  baseSettings = snapshot(settings);
   $("#saved").textContent = c("theme.ob.saved");
 }
 

@@ -325,6 +325,13 @@ export interface JobMatch {
   jobId: string;
   company: string;
   confidence: number;
+  /**
+   * The sender itself vouches for the company: its own domain, a Workday
+   * tenant address, or a known ATS mailer. A display name alone ("Acme
+   * Careers" <x@gmail.com>) is weak evidence and is never enough to
+   * auto-apply a rejection or an offer.
+   */
+  strong: boolean;
 }
 
 const APPLIED: JobStatus[] = ["submitted", "interviewing", "offer", "rejected"];
@@ -395,7 +402,25 @@ export function matchJob(mail: MailLike, jobs: JobRef[], hint = ""): JobMatch | 
   scored.sort((a, b) => b.total - a.total);
   const [best, second] = scored;
   if (second && best!.total - second.total < 0.02) return null;
-  return { jobId: best!.job.id, company: best!.name, confidence: Math.min(0.99, Math.round(best!.total * 100) / 100) };
+  return {
+    jobId: best!.job.id,
+    company: best!.name,
+    confidence: Math.min(0.99, Math.round(best!.total * 100) / 100),
+    strong: senderVouches(m.fromEmail, best!.job),
+  };
+}
+
+/** Does the sender address itself point at this job's company (see JobMatch.strong)? */
+function senderVouches(fromEmail: string, job: JobRef): boolean {
+  if (isAtsEmail(fromEmail)) return true;
+  const keys = [companyKey(job.company), companyKey(pretty(companyFromUrl(job.url)))].map(compact).filter((k) => k.length >= 2);
+  const label = compact(senderLabel(fromEmail));
+  if (label && keys.some((k) => k === label || (k.length >= 4 && label.length >= 4 && (k.startsWith(label) || label.startsWith(k))))) return true;
+  if (under(domainOf(fromEmail), "myworkday.com")) {
+    const local = compact(fromEmail.split("@")[0]!.toLowerCase());
+    return keys.some((k) => local === k || (k.length >= 4 && local.startsWith(k)));
+  }
+  return false;
 }
 
 /** Cheap pre-filter before asking an AI: does this look like it could be about a job at all? */

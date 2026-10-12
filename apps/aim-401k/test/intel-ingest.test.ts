@@ -190,6 +190,44 @@ describe("intelIngest", () => {
     expect(s.intel.find((i: IntelItem) => i.subject === "Following up")).toBeUndefined(); // stayed "other"
   });
 
+  it("never moves a job that's queued or mid-application (Workday account mail arrives mid-fill)", async () => {
+    await mutate((s) => {
+      s.jobs.push(job("wd", "Acme Corp", "Platform Engineer", "needs_you"), job("q", "Hooli", "SRE", "queued"));
+    });
+    await ingest("gmail-tab", [
+      mail("Thank you for your interest in Acme Corp", "Your candidate account has been created.", "Acme Corp", "acmecorp@myworkday.com"),
+      mail("Thanks for your interest in Hooli", "We've received your application.", "Hooli", "jobs@hooli.com"),
+    ]);
+    const s = await getState();
+    expect(s.jobs.find((j) => j.id === "wd")!.status).toBe("needs_you");
+    expect(s.jobs.find((j) => j.id === "q")!.status).toBe("queued");
+    // Still recorded and matched, so the user can see it.
+    expect(s.intel.filter((i) => i.jobId === "wd" || i.jobId === "q")).toHaveLength(2);
+    expect(s.intel.every((i) => !i.applied)).toBe(true);
+  });
+
+  it("ignores mail older than the application and display-name-only rejections", async () => {
+    await ingest("gmail-tab", [
+      // 40 days old: about some earlier Globex role.
+      mail("Your application to Globex", "Unfortunately, we will not be moving forward.", "Globex", "jobs@globex.com", 40 * 86400_000),
+      // Freemail sender spoofing a display name.
+      mail("Acme Robotics update", "We regret to inform you that we will not be moving forward.", "Acme Robotics Careers", "acme.careers@gmail.com"),
+    ]);
+    const s = await getState();
+    expect(s.jobs.find((j) => j.id === "globex")!.status).toBe("submitted");
+    expect(s.jobs.find((j) => j.id === "acme")!.status).toBe("submitted");
+  });
+
+  it("still applies rejections from the company's own domain or an ATS mailer", async () => {
+    await ingest("gmail-tab", [
+      mail("Your application", "Unfortunately, we have decided to move forward with other candidates.", "Acme Robotics", "no-reply@us.greenhouse-mail.io"),
+      mail("Globex update", "Unfortunately, we will not be moving forward with your application.", "Globex Talent", "talent@globex.com"),
+    ]);
+    const s = await getState();
+    expect(s.jobs.find((j) => j.id === "acme")!.status).toBe("rejected");
+    expect(s.jobs.find((j) => j.id === "globex")!.status).toBe("rejected");
+  });
+
   it("drops malformed input from the page", async () => {
     const r = await ingest("gmail-tab", [null, { messageId: "", subject: "x" }, { messageId: "ok", subject: 5 }, "junk"] as unknown as RawMail[]);
     expect(r.added).toBe(0);

@@ -165,11 +165,9 @@ export class Overlay {
     this.wrap = el("div", { className: "wrap" });
     this.root.append(this.wrap);
     (document.body ?? document.documentElement).append(this.host);
-    // Plain mode is switched from extension pages; pick it up without waiting for the next broadcast.
-    api.storage?.onChanged?.addListener((changes, area) => {
-      if (area !== "local" || !changes.settings) return;
-      void (send({ type: "getOverlayState" }) as Promise<OverlayState | undefined>).then((s) => s && this.update(s)).catch(() => undefined);
-    });
+    // No storage.onChanged here: in a content script that would copy every storage write
+    // (profile, resume, keys, email intel) into every tab. The background re-broadcasts the
+    // overlay state (incl. plain mode) whenever settings change.
   }
 
   private c(key: CopyKey, vars?: Record<string, string | number>): string {

@@ -175,6 +175,13 @@ async function draw(box: HTMLElement): Promise<void> {
     if (typed.trim() !== "ERASE") return showResult(t("privacy.done.eraseCancelled"), false);
     try {
       await send<WipeResult>({ type: "wipeAll", keep: [] });
+      // Page-side memory too (spreadsheet mappings + published-sheet links, view prefs).
+      // Extension pages share one origin, so this clears it for every page.
+      try {
+        localStorage.clear();
+      } catch {
+        /* storage blocked: nothing stored there either */
+      }
       reloadWith(t("privacy.done.erase"));
     } catch (e) {
       showResult(t("privacy.done.failed", { error: String(e) }), false);

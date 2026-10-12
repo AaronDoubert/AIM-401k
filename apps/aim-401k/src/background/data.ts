@@ -2,6 +2,7 @@
 // helpers the setup screen asks for (local model detection, requests today).
 // OWNER: Privacy agent.
 import { api } from "../shared/api";
+import * as gmail from "./gmail";
 import type { StorageReport, WipeResult } from "../shared/messages";
 import { normalizeProfile, normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
 import { preset } from "../shared/providers";
@@ -75,6 +76,8 @@ export async function wipeAll(keep: KeepKey[] = []): Promise<WipeResult> {
   const cleared = keysToClear(stored, keep);
   if (cleared.length) await api.storage.local.remove(cleared);
   if (cleared.includes(AI_USAGE_KEY)) resetAiUsage();
+  // Settings gone = Gmail connection gone: revoke and forget the token too.
+  if (!kept.has("settings")) await gmail.signOut(true).catch(() => undefined);
   // Close tabs after the jobs are gone, so tabs.onRemoved finds nothing to mark failed.
   let closedTabs = 0;
   for (const id of tabs) {
