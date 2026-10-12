@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><title>Careers</title></head>
+<body>
+<!--
+  War Room e2e fixture: a two-step SPA application that renders slowly, so a
+  unit visibly goes recon -> filling -> advancing -> filling -> holding.
+  Query: co, role (display), delay (ms before the form renders), consent=1.
+-->
+<main>
+  <h1 id="role"></h1>
+  <span class="company-name" id="co"></span>
+  <div id="app"><p>Loading application…</p></div>
+</main>
+<script>
+  const q = new URLSearchParams(location.search);
+  const co = q.get("co") || "Cyberdyne Systems";
+  const role = q.get("role") || "Staff Autonomy Engineer";
+  document.getElementById("co").textContent = co;
+  document.getElementById("role").textContent = role;
+  document.title = role + " | " + co + " Careers";
+  const delay = Number(q.get("delay") || 1200);
+  const app = document.getElementById("app");
+  const state = {};
+  app.addEventListener("input", (e) => (state[e.target.name] = e.target.type === "checkbox" ? e.target.checked : e.target.value));
+  app.addEventListener("change", (e) => (state[e.target.name] = e.target.type === "checkbox" ? e.target.checked : e.target.type === "file" ? e.target.files.length : e.target.value));
+
+  function step1() {
+    app.innerHTML = `
+      <h2>Step 1 of 2 · Your details</h2>
+      <div><label for="fn">First Name *</label><input id="fn" name="first_name" required></div>
+      <div><label for="ln">Last Name *</label><input id="ln" name="last_name" required></div>
+      <div><label for="em">Email *</label><input id="em" name="email" type="email" required></div>
+      <div><label for="ph">Phone *</label><input id="ph" name="phone" type="tel" required></div>
+      <div><label for="city">City *</label><input id="city" name="city" required></div>
+      <div><label for="li">LinkedIn Profile</label><input id="li" name="linkedin"></div>
+      <div><label for="cv">Resume/CV *</label><input id="cv" name="resume" type="file" style="display:none" required></div>
+      <div><label for="auth">Are you legally authorized to work in the United States? *</label>
+        <select id="auth" name="auth" required><option value="">Select...</option><option>Yes</option><option>No</option></select></div>
+      <fieldset><legend>Will you now or in the future require visa sponsorship? *</legend>
+        <label><input type="radio" name="sponsor" value="yes" required> Yes</label>
+        <label><input type="radio" name="sponsor" value="no"> No</label></fieldset>
+      <button id="next" type="button">Next</button>`;
+    document.getElementById("next").onclick = () => {
+      const need = ["first_name", "last_name", "email", "phone", "city", "resume", "auth", "sponsor"];
+      if (need.some((k) => !state[k])) return;
+      app.innerHTML = "<p>Saving…</p>";
+      setTimeout(step2, 1200);
+    };
+  }
+
+  function step2() {
+    app.innerHTML = `
+      <h2>Step 2 of 2 · Questions</h2>
+      <div><label for="chaos">Describe the most chaotic production system you have stabilized. *</label>
+        <textarea id="chaos" name="chaos" required></textarea></div>
+      <div><label for="hear">How did you hear about us?</label>
+        <select id="hear" name="hear"><option value="">Select...</option><option>LinkedIn</option><option>Company Website</option><option>Referral</option></select></div>
+      ${q.get("consent") ? `<div><label><input type="checkbox" id="keep" name="keep" required> I consent to ${co.replace(/[<>&"]/g, "")} keeping my data on file for future openings. *</label></div>` : ""}
+      <button id="submit" type="button">Submit Application</button>`;
+    document.getElementById("submit").onclick = () => {
+      const need = ["chaos"].concat(q.get("consent") ? ["keep"] : []);
+      if (need.some((k) => !state[k])) return;
+      sessionStorage.setItem("submitted", JSON.stringify(state));
+      location.href = "/thanks.html";
+    };
+  }
+
+  setTimeout(step1, delay);
+</script>
+</body></html>

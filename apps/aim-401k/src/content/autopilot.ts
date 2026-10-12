@@ -1,7 +1,7 @@
 import { fitToField, resolveField } from "../core/matcher";
 import type { ContentContext, DraftResult, NeedInput, PageState, ToBackground } from "../shared/messages";
 import { api } from "../shared/api";
-import type { NeedKind, PageMeta } from "../shared/types";
+import type { NeedKind, PageMeta, UnitPhase, UnitState } from "../shared/types";
 import { sleep } from "../shared/util";
 import { queryAll } from "./dom";
 import {
@@ -22,6 +22,9 @@ const send = (msg: ToBackground): Promise<unknown> => api.runtime.sendMessage(ms
 
 const NOISE_RE = /\b(search|keyword|newsletter|subscribe)\b/i;
 
+type UnitReport = Omit<UnitState, "jobId" | "updatedAt" | "thumb">;
+const UNIT_THROTTLE_MS = 200;
+
 /**
  * Drives one frame of a managed job tab: fills what it knows, asks the
  * background for AI drafts, advances multi-step forms, and reports anything
@@ -41,6 +44,10 @@ export class Autopilot {
   private aiDrafted = new Set<string>();
   private drafts = new Map<string, DraftResult>();
   private lastReport = "";
+  // War Room unit state (cosmetic telemetry; never allowed to break filling).
+  private unitState: UnitReport = { phase: "recon", step: 1, fieldsTotal: 0, fieldsDone: 0, currentField: "" };
+  private unitSentAt = 0;
+  private unitTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private ctx: ContentContext,
@@ -81,6 +88,7 @@ export class Autopilot {
     try {
       await this.pass();
     } catch (e) {
+      this.unit({ phase: "holding" });
       await this.report("blocked", [{ kind: "error", prompt: `AIM-401k hit an error: ${String(e)}` }]);
     } finally {
       this.busy = false;
@@ -105,6 +113,33 @@ export class Autopilot {
     await send({ type: "report", jobId: this.jobId, state, needs, note, meta, aiDrafted: this.aiDrafted.size });
   }
 
+  /**
+   * Report this frame's progress to the War Room. Phase changes go out at
+   * once; field-by-field updates are throttled (a trailing send keeps the last).
+   */
+  private unit(patch: Partial<UnitReport>): void {
+    if (!this.jobId) return;
+    const phaseChanged = patch.phase != null && patch.phase !== this.unitState.phase;
+    this.unitState = { ...this.unitState, ...patch };
+    const fire = () => {
+      if (this.unitTimer) clearTimeout(this.unitTimer);
+      this.unitTimer = null;
+      this.unitSentAt = Date.now();
+      try {
+        void send({ type: "unit", jobId: this.jobId, state: { ...this.unitState } }).catch(() => undefined);
+      } catch {
+        /* extension context gone; the War Room is optional */
+      }
+    };
+    const wait = UNIT_THROTTLE_MS - (Date.now() - this.unitSentAt);
+    if (phaseChanged || wait <= 0) fire();
+    else this.unitTimer ??= setTimeout(fire, wait);
+  }
+
+  private get unitPhase(): UnitPhase {
+    return this.unitState.phase;
+  }
+
   private formFields(): ScannedField[] {
     return scanFields().filter((f) => !(f.info.kind === "text" && NOISE_RE.test(`${f.info.label} ${f.info.attrs} ${f.info.placeholder}`)));
   }
@@ -116,6 +151,7 @@ export class Autopilot {
 
     if (isConfirmationPage()) {
       this.done = true;
+      this.unit({ phase: "delivered", currentField: "" });
       await this.report("submitted", [], "Confirmation page detected", extractMeta());
       return;
     }
@@ -133,9 +169,12 @@ export class Autopilot {
         return;
       }
       if (isLoginWall(fields.length)) {
+        this.unit({ phase: "holding" });
         await this.report("blocked", [{ kind: "login", prompt: "Sign in or create an account on this site, then I'll continue." }], undefined, meta);
         return;
       }
+      // Between steps (just clicked Next / Submit) the form is briefly gone: that's not recon.
+      if (this.unitPhase !== "advancing" && this.unitPhase !== "releasing") this.unit({ phase: "recon", currentField: "" });
       const apply = findApplyButton();
       if (apply && this.applyClicks < 3) {
         this.applyClicks++;
@@ -149,6 +188,7 @@ export class Autopilot {
     }
 
     if (this.top && isLoginWall(meaningful.length)) {
+      this.unit({ phase: "holding" });
       await this.report("blocked", [{ kind: "login", prompt: "Sign in or create an account on this site, then I'll continue." }], undefined, meta);
       return;
     }
@@ -158,6 +198,9 @@ export class Autopilot {
     const { profile, answers, settings } = this.ctx;
     const jobCtx = { company: meta.company, title: meta.title };
     const useAi = settings.llmMode !== "off" && settings.hasApiKey;
+    const counted = fields.filter((f) => f.info.required || settings.fillOptional);
+    let done = counted.filter(isFilled).length;
+    this.unit({ phase: "filling", fieldsTotal: counted.length, fieldsDone: done, currentField: "" });
 
     const askHuman = (f: ScannedField, kind: NeedKind, detail = "") => {
       for (const el of f.els) el.dataset.aim = "need";
@@ -192,7 +235,9 @@ export class Autopilot {
       if (r.type === "skip") continue;
 
       if (r.type === "value" || r.type === "resume") {
+        this.unit({ currentField: f.info.label || f.info.attrs });
         const ok = await fillField(f, r.type === "value" ? r.value : "", profile.resume);
+        if (ok) this.unit({ fieldsDone: ++done });
         if (!ok && f.info.required) askHuman(f, "question", "Couldn't fill this automatically");
         continue;
       }
@@ -203,6 +248,7 @@ export class Autopilot {
       // unknown
       if (!f.info.required) continue;
       if (useAi && f.info.kind !== "file" && f.info.kind !== "checkbox") {
+        this.unit({ currentField: f.info.label || f.info.attrs });
         let d = this.drafts.get(f.info.key);
         if (!d) {
           await send({ type: "progress", jobId: this.jobId, msg: `Drafting answer: ${f.info.label.slice(0, 80)}` });
@@ -214,6 +260,7 @@ export class Autopilot {
         }
         const fitted = d.answer && !d.needsHuman ? fitToField(f.info, d.answer) : null;
         if (fitted && (await fillField(f, fitted, profile.resume))) {
+          this.unit({ fieldsDone: ++done });
           this.aiDrafted.add(f.info.key);
           for (const el of f.els) el.dataset.aim = "ai";
           continue;
@@ -232,7 +279,10 @@ export class Autopilot {
       if (err && !neededKeys.has(f.info.key)) askHuman(f, "question", err);
     }
 
+    this.unit({ fieldsDone: counted.filter(isFilled).length });
+
     if (needs.length) {
+      this.unit({ phase: "holding" });
       await this.report("blocked", needs, undefined, meta);
       return;
     }
@@ -245,6 +295,7 @@ export class Autopilot {
     if (next && settings.autoAdvance) {
       if (!this.stepGuard(sig)) return this.reportStuck(meta);
       await send({ type: "progress", jobId: this.jobId, msg: "Filled step; clicking Next" });
+      this.unit({ phase: "advancing", step: this.unitState.step + 1, currentField: "" });
       press(next);
       this.schedule(1800);
       return;
@@ -256,6 +307,7 @@ export class Autopilot {
       if (canAutoSubmit) {
         if (!this.stepGuard(sig)) return this.reportStuck(meta);
         await send({ type: "progress", jobId: this.jobId, msg: "Submitting application" });
+        this.unit({ phase: "releasing", currentField: "" });
         press(submit);
         this.schedule(3000);
         return;
@@ -263,15 +315,18 @@ export class Autopilot {
       const bits = ["Everything is filled — review and submit."];
       if (this.aiDrafted.size) bits.push(`${this.aiDrafted.size} AI-drafted answer(s) are highlighted in amber.`);
       if (captcha) bits.push("There's a CAPTCHA to solve first.");
+      this.unit({ phase: "holding" });
       await this.report("ready", [{ kind: "review_submit", prompt: bits.join(" ") }], undefined, meta);
       return;
     }
 
     if (next) {
+      this.unit({ phase: "holding" });
       await this.report("ready", [{ kind: "review_submit", prompt: "This step is filled. Click Next (auto-advance is off)." }], undefined, meta);
       return;
     }
 
+    this.unit({ phase: "holding" });
     await this.report(
       "blocked",
       [{ kind: "stalled", prompt: "I filled what I could but can't find a Next or Submit button." }],
@@ -289,6 +344,7 @@ export class Autopilot {
 
   private async reportStuck(meta: PageMeta): Promise<void> {
     const errs = pageErrors();
+    this.unit({ phase: "holding" });
     await this.report(
       "blocked",
       [{ kind: "stalled", prompt: `Stuck on this step${errs.length ? `: ${errs.join(" · ")}` : " (the page didn't advance)"}` }],
@@ -312,6 +368,7 @@ export class Autopilot {
     const btn = findSubmitButton() ?? findNextButton();
     if (!btn) return false;
     await send({ type: "progress", jobId: this.jobId, msg: "Submitting (you approved)" });
+    this.unit({ phase: "releasing", currentField: "" });
     press(btn);
     this.lastReport = "";
     this.schedule(3000);
