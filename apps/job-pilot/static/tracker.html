@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Application Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 60px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 16px 0; }
+    .stat { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .stat b { font-size: 22px; display: block; font-variant-numeric: tabular-nums; }
+    .stat span { font-size: 12px; color: var(--muted); }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    .toolbar input, .toolbar select { width: auto; }
+    .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; min-width: 860px; }
+    th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); background: var(--soft); position: sticky; top: 0; }
+    td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+    td .title { font-weight: 600; }
+    td a { color: var(--accent); text-decoration: none; }
+    td select { width: auto; font-size: 12px; padding: 2px 4px; }
+    td textarea { min-height: 32px; font-size: 12px; }
+    .log { font-size: 11px; color: var(--muted); max-width: 260px; }
+    details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+    .add textarea { height: 70px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="row" style="justify-content: space-between">
+      <div><h1>Application tracker</h1><div class="muted">Every job JobPilot touched, plus anything you add or mark by hand.</div></div>
+      <div class="row">
+        <button id="pause">Pause</button>
+        <button id="csv">Export CSV</button>
+        <button id="settings">Profile &amp; settings</button>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="card add" style="margin-bottom: 16px">
+      <div class="muted" style="margin-bottom: 6px">Paste job posting or application URLs (any text with links works):</div>
+      <textarea id="urls" placeholder="https://boards.greenhouse.io/acme/jobs/123&#10;https://jobs.lever.co/acme/abc"></textarea>
+      <div class="row" style="margin-top: 8px">
+        <button class="primary" id="queue">Queue &amp; start applying</button>
+        <button id="save">Just save for later</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input id="q" placeholder="Search company, title, notes…" />
+      <select id="filter"></select>
+      <button id="start-saved">Queue all saved</button>
+      <button id="clear-done" class="danger">Remove skipped/failed</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Role</th><th>Status</th><th>Applied</th><th>Source</th><th>Notes</th><th>Activity</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="tracker.js"></script>
+</body>
+</html>

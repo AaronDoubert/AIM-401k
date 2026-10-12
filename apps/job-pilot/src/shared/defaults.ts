@@ -1,0 +1,66 @@
+import type { Profile, Settings } from "./types";
+
+export const DECLINE = "Decline to self-identify";
+
+export const DEFAULT_PROFILE: Profile = {
+  firstName: "",
+  lastName: "",
+  preferredName: "",
+  pronouns: "",
+  email: "",
+  phone: "",
+  street: "",
+  city: "",
+  state: "",
+  postalCode: "",
+  country: "United States",
+  linkedin: "",
+  github: "",
+  portfolio: "",
+  currentTitle: "",
+  currentCompany: "",
+  yearsExperience: "",
+  school: "",
+  degree: "",
+  major: "",
+  graduationYear: "",
+  workAuthorized: "",
+  requiresSponsorship: "",
+  over18: "yes",
+  willingToRelocate: "",
+  salaryExpectation: "",
+  startDate: "",
+  howDidYouHear: "Company website",
+  gender: DECLINE,
+  race: DECLINE,
+  hispanicLatino: DECLINE,
+  veteranStatus: DECLINE,
+  disabilityStatus: DECLINE,
+  summary: "",
+  resumeText: "",
+  coverLetterTemplate: "",
+  resume: null,
+};
+
+export const DEFAULT_SETTINGS: Settings = {
+  paused: false,
+  autoAdvance: true,
+  autoSubmit: false,
+  concurrency: 1,
+  maxOpenTabs: 6,
+  stallMinutes: 4,
+  notifications: true,
+  fillOptional: true,
+  llmMode: "off",
+  anthropicApiKey: "",
+  model: "claude-opus-5-5",
+  effort: "medium",
+};
+
+export const STORAGE_KEYS = {
+  profile: "profile",
+  settings: "settings",
+  jobs: "jobs",
+  answers: "answers",
+  needs: "needs",
+} as const;

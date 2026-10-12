@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JobPilot Settings</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+    nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 1; border-bottom: 1px solid var(--line); }
+    nav a { color: var(--fg); text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); }
+    section { margin-bottom: 28px; }
+    .wide { grid-column: 1 / -1; }
+    table { width: 100%; border-collapse: collapse; }
+    td { border-top: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
+    td textarea { min-height: 38px; }
+    .check { flex-direction: row; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; }
+    .check input { width: auto; }
+    .toast { bottom: 72px; }
+    .savebar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 16px; display: flex; justify-content: center; gap: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>JobPilot</h1>
+    <div class="muted">Everything here stays in this browser (extension storage). Fill this once; JobPilot reuses it on every application.</div>
+    <nav>
+      <a href="#profile">Profile</a><a href="#resume">Resume</a><a href="#eligibility">Eligibility</a><a href="#eeo">EEO</a>
+      <a href="#answers">Saved answers</a><a href="#automation">Automation</a><a href="#ai">AI drafting</a><a href="#backup">Backup</a>
+    </nav>
+
+    <section id="profile"><h2>Profile</h2><div class="grid" data-group="profile"></div></section>
+
+    <section id="resume">
+      <h2>Resume</h2>
+      <div class="card">
+        <div class="row">
+          <input type="file" id="resume-file" accept=".pdf,.doc,.docx,.txt,.rtf" style="width:auto" />
+          <span class="muted" id="resume-name">No file saved</span>
+          <button id="resume-clear" class="danger">Remove</button>
+        </div>
+        <div class="grid" style="margin-top:12px" data-group="resume"></div>
+      </div>
+    </section>
+
+    <section id="eligibility"><h2>Eligibility &amp; logistics</h2><div class="grid" data-group="eligibility"></div></section>
+    <section id="eeo">
+      <h2>Voluntary self-identification (EEO)</h2>
+      <div class="muted">Defaults to declining. JobPilot picks the closest matching option on each form.</div>
+      <div class="grid" style="margin-top:8px" data-group="eeo"></div>
+    </section>
+
+    <section id="answers">
+      <h2>Saved answers</h2>
+      <div class="muted">Answers you give in the floating box are saved here (when "remember" is ticked) and reused when the same question shows up again. For checkboxes use <code>checked</code>; for multi-select separate options with <code>;</code>.</div>
+      <div class="row" style="margin:8px 0"><input id="ans-filter" placeholder="Filter…" style="max-width:280px" /><button id="ans-add">Add answer</button></div>
+      <table><tbody id="ans-body"></tbody></table>
+    </section>
+
+    <section id="automation"><h2>Automation</h2><div class="grid" data-group="automation"></div></section>
+
+    <section id="ai">
+      <h2>AI drafting (optional)</h2>
+      <div class="muted">When on, required questions your profile and saved answers can't cover are drafted by Claude from your profile, resume and the job description. The AI is told never to invent facts and to hand anything personal back to you. Your API key stays in the extension's background script and is only sent to api.anthropic.com.</div>
+      <div class="grid" style="margin-top:8px" data-group="ai"></div>
+    </section>
+
+    <section id="backup">
+      <h2>Backup</h2>
+      <div class="row">
+        <button id="export">Export everything (JSON)</button>
+        <label class="btn">Import JSON<input type="file" id="import" accept=".json" hidden /></label>
+      </div>
+      <div class="muted" style="margin-top:6px">Exports include your profile, saved answers, settings (without API key) and tracked jobs.</div>
+    </section>
+  </main>
+  <div class="savebar"><span class="muted" id="dirty"></span><button class="primary" id="save">Save</button></div>
+  <div class="toast" id="toast"></div>
+  <script src="options.js"></script>
+</body>
+</html>
