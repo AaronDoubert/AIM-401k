@@ -1,0 +1,60 @@
+import { describe, expect, it } from "vitest";
+import { BOARD_COLUMNS, callsigns, columnFor, dropStatus, groupForBoard } from "../src/ui/board";
+import type { Job, JobStatus } from "../src/shared/types";
+
+const ALL: JobStatus[] = ["saved", "queued", "running", "needs_you", "ready_to_submit", "submitted", "failed", "skipped", "interviewing", "offer", "rejected"];
+
+const job = (id: string, status: JobStatus, createdAt = 0, updatedAt = 0): Job => ({
+  id,
+  url: `https://x.test/${id}`,
+  company: "",
+  title: "",
+  location: "",
+  ats: "",
+  status,
+  createdAt,
+  updatedAt,
+  appliedAt: null,
+  lastProgressAt: 0,
+  notes: "",
+  tabId: null,
+  autoTab: false,
+  aiDrafted: 0,
+  log: [],
+});
+
+describe("board columns", () => {
+  it("every status maps to exactly one column", () => {
+    for (const s of ALL) expect(BOARD_COLUMNS.filter((c) => c.statuses.includes(s)).length, s).toBe(1);
+  });
+
+  it("follows the pipeline order with LOST collapsed last", () => {
+    expect(BOARD_COLUMNS.map((c) => c.id)).toEqual(["targeted", "engaged", "holding", "delivered", "contact", "secured", "lost"]);
+    expect(BOARD_COLUMNS.at(-1)?.collapsed).toBe(true);
+    expect(columnFor("ready_to_submit")).toBe("holding");
+    expect(columnFor("failed")).toBe("lost");
+  });
+
+  it("groups jobs, newest update first", () => {
+    const g = groupForBoard([job("a", "queued", 0, 1), job("b", "saved", 0, 5), job("c", "submitted"), job("d", "skipped")]);
+    expect(g.targeted.map((j) => j.id)).toEqual(["b", "a"]);
+    expect(g.delivered.map((j) => j.id)).toEqual(["c"]);
+    expect(g.lost.map((j) => j.id)).toEqual(["d"]);
+    expect(Object.values(g).flat()).toHaveLength(4);
+  });
+
+  it("only allows drops that change status into a manual column", () => {
+    expect(dropStatus(job("a", "submitted"), "contact")).toBe("interviewing");
+    expect(dropStatus(job("a", "interviewing"), "secured")).toBe("offer");
+    expect(dropStatus(job("a", "submitted"), "lost")).toBe("rejected");
+    expect(dropStatus(job("a", "queued"), "targeted")).toBeNull(); // already there
+    expect(dropStatus(job("a", "skipped"), "lost")).toBeNull();
+    expect(dropStatus(job("a", "saved"), "engaged")).toBeNull(); // runtime state, not draggable into
+    expect(dropStatus(job("a", "submitted"), "holding")).toBeNull();
+  });
+
+  it("numbers call signs by creation time", () => {
+    const m = callsigns([job("z", "saved", 30), job("y", "saved", 10), job("x", "saved", 20)]);
+    expect([m.get("y"), m.get("x"), m.get("z")]).toEqual([1, 2, 3]);
+  });
+});

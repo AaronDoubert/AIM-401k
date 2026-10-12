@@ -1,46 +1,48 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-chud="1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AIM-401k Settings</title>
   <link rel="stylesheet" href="styles.css" />
-  <style>
-    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
-    nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 1; border-bottom: 1px solid var(--line); }
-    nav a { color: var(--fg); text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); }
-    section { margin-bottom: 28px; }
-    h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); }
-    table { width: 100%; border-collapse: collapse; }
-    td { border-top: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
-    td textarea { min-height: 38px; }
-    .savebar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 16px; display: flex; justify-content: center; gap: 8px; align-items: center; }
-    .toast { bottom: 72px; }
-  </style>
 </head>
-<body>
-  <main>
-    <div class="row spread">
-      <div>
-        <h1>AIM-401k</h1>
-        <div class="muted">Everything here stays in this browser (extension storage).</div>
-      </div>
-      <button id="wizard">Run setup wizard</button>
+<body class="options">
+  <header class="topbar">
+    <div class="brand">
+      <img class="mark" src="icons/icon.svg" alt="" width="26" height="26" />
+      <span class="wordmark">AIM-401k</span>
+      <span class="crumb" data-copy="theme.options.title">LOADOUT</span>
     </div>
-    <nav>
-      <a href="#profile">Profile</a><a href="#experience">Experience</a><a href="#resume">Resume</a><a href="#eligibility">Eligibility</a>
-      <a href="#eeo">EEO</a><a href="#answers">Saved answers</a><a href="#automation">Automation</a><a href="#ai">AI</a><a href="#intel">Inbox &amp; sheets</a><a href="#privacy">Privacy</a><a href="#backup">Backup</a>
+    <button id="wizard" data-copy="theme.options.wizard">RE-RUN DEPLOYMENT</button>
+  </header>
+  <main>
+    <div class="page-head">
+      <h1><span data-copy="theme.options.title">LOADOUT</span><small data-copy-plain="theme.options.title">Settings</small></h1>
+      <p class="muted" data-copy="theme.options.sub">Everything here stays in this browser (extension storage).</p>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#profile" data-copy="theme.nav.profile">IDENT</a>
+      <a href="#experience" data-copy="theme.nav.experience">SERVICE RECORD</a>
+      <a href="#resume" data-copy="theme.nav.resume">DOSSIER</a>
+      <a href="#eligibility" data-copy="theme.nav.eligibility">CLEARANCE</a>
+      <a href="#eeo" data-copy="theme.nav.eeo">EEO</a>
+      <a href="#answers" data-copy="theme.nav.answers">DOCTRINE</a>
+      <a href="#automation" data-copy="theme.nav.automation">ROE</a>
+      <a href="#ai" data-copy="theme.nav.ai">AI ASSET</a>
+      <a href="#intel" data-copy="theme.nav.intel">SIGINT</a>
+      <a href="#privacy" data-copy="theme.nav.privacy">OPSEC</a>
+      <a href="#backup" data-copy="theme.nav.backup">BACKUP</a>
     </nav>
 
     <section id="profile">
-      <h2>Profile</h2>
+      <h2><span class="idx">01</span><span data-copy="theme.sec.profile">IDENT</span><small data-copy-plain="theme.sec.profile">Profile</small></h2>
       <div class="grid" data-group="basics"></div>
       <h3>Links</h3>
       <div class="grid" data-group="links"></div>
     </section>
 
     <section id="experience">
-      <h2>Experience &amp; education</h2>
+      <h2><span class="idx">02</span><span data-copy="theme.sec.experience">SERVICE RECORD</span><small data-copy-plain="theme.sec.experience">Experience &amp; education</small></h2>
       <h3>Work history (most recent first)</h3>
       <div id="work"></div>
       <h3>Education</h3>
@@ -50,68 +52,73 @@
     </section>
 
     <section id="resume">
-      <h2>Resume &amp; documents</h2>
+      <h2><span class="idx">03</span><span data-copy="theme.sec.resume">DOSSIER</span><small data-copy-plain="theme.sec.resume">Resume &amp; documents</small></h2>
       <div class="card">
         <div class="row">
-          <label class="btn">Upload / re-import resume<input type="file" id="resume-file" accept=".pdf,.docx,.txt,.md,.json" hidden /></label>
-          <span class="muted" id="resume-name">No file saved</span>
+          <label class="btn primary">Upload / re-import resume<input type="file" id="resume-file" accept=".pdf,.docx,.txt,.md,.json" hidden /></label>
+          <span class="muted mono" id="resume-name">No file saved</span>
           <button id="resume-clear" class="danger">Remove file</button>
         </div>
-        <div class="muted" style="margin-top:6px">Uploading a resume attaches it to applications and fills empty profile fields from it.</div>
-        <div class="grid" style="margin-top:12px" data-group="documents"></div>
+        <div class="muted" style="margin-top:8px">Uploading a resume attaches it to applications and fills empty profile fields from it.</div>
+        <div class="grid" style="margin-top:14px" data-group="documents"></div>
       </div>
     </section>
 
     <section id="eligibility">
-      <h2>Eligibility &amp; preferences</h2>
+      <h2><span class="idx">04</span><span data-copy="theme.sec.eligibility">CLEARANCE</span><small data-copy-plain="theme.sec.eligibility">Eligibility &amp; preferences</small></h2>
       <div class="grid" data-group="eligibility"></div>
       <h3>Preferences</h3>
       <div class="grid" data-group="preferences"></div>
     </section>
 
     <section id="eeo">
-      <h2>Voluntary self-identification (EEO)</h2>
+      <h2><span class="idx">05</span><span data-copy="theme.sec.eeo">EEO</span><small data-copy-plain="theme.sec.eeo">Voluntary self-identification (EEO)</small></h2>
       <div class="muted">Defaults to declining. AIM-401k picks the closest matching option on each form.</div>
-      <div class="grid" style="margin-top:8px" data-group="eeo"></div>
+      <div class="grid" style="margin-top:10px" data-group="eeo"></div>
     </section>
 
     <section id="answers">
-      <h2>Saved answers</h2>
+      <h2><span class="idx">06</span><span data-copy="theme.sec.answers">DOCTRINE</span><small data-copy-plain="theme.sec.answers">Saved answers</small></h2>
       <div class="muted">Answers you give in the floating box are saved here (when "remember" is ticked) and reused when the same question shows up again. For checkboxes use <code>checked</code>; for multi-select separate options with <code>;</code>; dates as YYYY-MM-DD.</div>
-      <div class="row" style="margin:8px 0"><input id="ans-filter" placeholder="Filter…" style="max-width:280px" /><button id="ans-add">Add answer</button></div>
+      <div class="row" style="margin:10px 0"><input id="ans-filter" placeholder="Filter…" aria-label="Filter saved answers" style="max-width:280px" /><button id="ans-add">Add answer</button></div>
       <table><tbody id="ans-body"></tbody></table>
     </section>
 
-    <section id="automation"><h2>Automation</h2><div class="grid" id="automation-fields"></div></section>
+    <section id="automation">
+      <h2><span class="idx">07</span><span data-copy="theme.sec.automation">RULES OF ENGAGEMENT</span><small data-copy-plain="theme.sec.automation">Automation</small></h2>
+      <div class="grid" id="automation-fields"></div>
+      <h3><span data-copy="theme.sec.interface">COMMS</span></h3>
+      <div class="grid" id="ui-fields"></div>
+    </section>
 
     <section id="ai">
-      <h2>AI helper (optional)</h2>
+      <h2><span class="idx">08</span><span data-copy="theme.sec.ai">AI ASSET</span><small data-copy-plain="theme.sec.ai">AI helper (optional)</small></h2>
       <div class="muted">Drafts answers to required questions your profile and saved answers can't cover, from your profile, resume and the job description. It's told never to invent facts and to hand anything personal back to you. Keys stay in the extension and are only sent to the provider you pick.</div>
-      <div class="grid" style="margin:10px 0" id="ai-mode"></div>
+      <div class="grid" style="margin:12px 0" id="ai-mode"></div>
       <div id="ai-setup"></div>
     </section>
 
     <section id="intel">
-      <h2>Inbox intel</h2>
+      <h2><span class="idx">09</span><span data-copy="theme.sec.intel">SIGINT</span><small data-copy-plain="theme.sec.intel">Inbox intel</small></h2>
       <div id="intel-settings"></div>
     </section>
 
     <section id="privacy">
-      <h2>Privacy &amp; data</h2>
+      <h2><span class="idx">10</span><span data-copy="theme.sec.privacy">OPSEC</span><small data-copy-plain="theme.sec.privacy">Privacy &amp; data</small></h2>
       <div id="privacy-panel"></div>
     </section>
 
     <section id="backup">
-      <h2>Backup</h2>
+      <h2><span class="idx">11</span><span data-copy="theme.sec.backup">BACKUP</span><small data-copy-plain="theme.sec.backup">Backup</small></h2>
       <div class="row">
         <button id="export">Export everything (JSON)</button>
         <label class="btn">Import JSON<input type="file" id="import" accept=".json" hidden /></label>
       </div>
-      <div class="muted" style="margin-top:6px">Exports include your profile, saved answers, settings (without API keys) and tracked jobs.</div>
+      <div class="muted" style="margin-top:8px">Exports include your profile, saved answers, settings (without API keys) and tracked jobs.</div>
     </section>
   </main>
-  <div class="savebar"><span class="muted" id="dirty"></span><button class="primary" id="save">Save</button></div>
-  <div class="toast" id="toast"></div>
+  <div class="savebar"><span id="dirty"></span><button class="primary" id="save" data-copy="theme.save">SAVE</button></div>
+  <div class="toast" id="toast" role="status"></div>
   <script type="module" src="options.js"></script>
 </body>
 </html>

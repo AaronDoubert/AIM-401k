@@ -151,6 +151,7 @@ export function overlayState(s: State): OverlayState {
     paused: s.settings.paused,
     running: s.jobs.filter((j) => j.status === "running").length,
     queued: s.jobs.filter((j) => j.status === "queued").length,
+    chud: s.settings.ui.chud,
   };
 }
 

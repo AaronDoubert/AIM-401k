@@ -17,17 +17,17 @@ const BASE_CHUD = {
   "app.name": "AIM-401k",
   "app.tagline": "Autonomous Employment Acquisition System",
 
-  "status.saved": "Marked",
-  "status.queued": "Targeted",
-  "status.running": "Engaged",
-  "status.needs_you": "Operator req.",
-  "status.ready_to_submit": "Awaiting release",
-  "status.submitted": "Delivered",
-  "status.failed": "Lost",
-  "status.skipped": "Stood down",
-  "status.interviewing": "Contact",
-  "status.offer": "Objective secured",
-  "status.rejected": "Target lost",
+  "status.saved": "MARKED",
+  "status.queued": "TARGETED",
+  "status.running": "ENGAGED",
+  "status.needs_you": "OPERATOR REQ.",
+  "status.ready_to_submit": "AWAITING RELEASE",
+  "status.submitted": "DELIVERED",
+  "status.failed": "LOST",
+  "status.skipped": "STOOD DOWN",
+  "status.interviewing": "CONTACT",
+  "status.offer": "OBJECTIVE SECURED",
+  "status.rejected": "TARGET LOST",
 
   "notify.need.title": "OPERATOR. {company} needs you",
   "notify.ready.title": "RELEASE AUTH. {company} is ready",
@@ -92,6 +92,13 @@ const BASE_PLAIN: Record<keyof typeof BASE_CHUD, string> = {
 };
 
 const PLAIN: Record<CopyKey, string> = { ...BASE_PLAIN, ...theme.PLAIN, ...warroom.PLAIN, ...intel.PLAIN, ...sheet.PLAIN, ...privacy.PLAIN };
+
+/** Both variant maps, for coverage tests. */
+export const COPY_MAPS: { chud: Record<CopyKey, string>; plain: Record<CopyKey, string> } = { chud: CHUD, plain: PLAIN };
+
+export function isCopyKey(key: string): key is CopyKey {
+  return key in CHUD;
+}
 
 /** Accepts settings (anything with ui.chud) or a boolean. */
 export function copy(mode: { ui: { chud: boolean } } | boolean, key: CopyKey, vars: Vars = {}): string {

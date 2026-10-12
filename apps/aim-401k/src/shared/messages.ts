@@ -111,6 +111,8 @@ export interface OverlayState {
   paused: boolean;
   running: number;
   queued: number;
+  /** settings.ui.chud: CHUD wording (true) or plain (false) in the in-page overlay. */
+  chud: boolean;
 }
 
 // background -> content
