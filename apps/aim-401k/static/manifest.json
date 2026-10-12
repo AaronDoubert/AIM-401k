@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AIM-401k",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AIM-401k: autonomous employment acquisition. Fills and tracks job applications, pings you only when a human is needed. All data stays local.",
   "browser_specific_settings": {
     "gecko": {
