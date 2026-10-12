@@ -12,7 +12,7 @@ importers:
         specifier: ^2.3.3
         version: 2.9.16
 
-  apps/job-pilot:
+  apps/aim-401k:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.133.0
