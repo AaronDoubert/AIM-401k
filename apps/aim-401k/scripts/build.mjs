@@ -15,6 +15,17 @@ cpSync(join(root, "static"), out, { recursive: true });
 // pdf.js runs in a worker loaded from the extension package.
 cpSync(join(root, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"), join(out, "pdf.worker.min.mjs"));
 
+// Fonts are bundled locally (no CDN): Archivo (variable, width axis) and JetBrains Mono, both OFL.
+const fonts = {
+  "@fontsource-variable/archivo": ["archivo-latin-wdth-normal.woff2", "archivo-latin-ext-wdth-normal.woff2"],
+  "@fontsource/jetbrains-mono": ["jetbrains-mono-latin-400-normal.woff2", "jetbrains-mono-latin-500-normal.woff2", "jetbrains-mono-latin-700-normal.woff2", "jetbrains-mono-latin-ext-400-normal.woff2"],
+};
+mkdirSync(join(out, "fonts"), { recursive: true });
+for (const [pkg, files] of Object.entries(fonts)) {
+  for (const f of files) cpSync(join(root, "node_modules", pkg, "files", f), join(out, "fonts", f));
+  cpSync(join(root, "node_modules", pkg, "LICENSE"), join(out, "fonts", `LICENSE-${pkg.split("/")[1]}.txt`));
+}
+
 const common = {
   outdir: out,
   bundle: true,

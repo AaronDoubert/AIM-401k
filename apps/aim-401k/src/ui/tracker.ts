@@ -1,40 +1,76 @@
 import { extractUrls, jobsToCsv } from "../core/csv";
 import { api } from "../shared/api";
-import { DEFAULT_SETTINGS, STORAGE_KEYS } from "../shared/defaults";
+import { copy, type CopyKey } from "../shared/copy";
+import { normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
 import type { Job, JobStatus, Settings } from "../shared/types";
-import { $, download, h, send, STATUS_LABEL, toast } from "./common";
+import { BOARD_COLUMNS, type BoardColumn, callsigns, dropStatus, groupForBoard } from "./board";
+import { $, applyCopy, download, h, JOB_STATUSES, pad, send, statusLabel, toast } from "./common";
 import { renderIntelFeed } from "./intelFeed";
 import { openSheetImport } from "./sheetImport";
 
-const STATUSES = Object.keys(STATUS_LABEL) as JobStatus[];
 let jobs: Job[] = [];
+let settings: Settings = normalizeSettings(undefined);
 let editing = false;
+let dragging: string | null = null;
+let signs = new Map<string, number>();
 
+const c = (key: CopyKey, vars?: Record<string, string | number>) => copy(settings, key, vars);
 const fmt = (t: number | null) => (t ? new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—");
+const tgt = (j: Job) => c("theme.tgt", { n: pad(signs.get(j.id) ?? 0, 4) });
+
+// Per-viewer conveniences only; the page works the same without storage.
+const pref = {
+  get(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* private mode etc. */
+    }
+  },
+};
+let view: "table" | "board" = pref.get("aim.tracker.view") === "board" ? "board" : "table";
+let lostOpen = pref.get("aim.board.lostOpen") === "1";
 
 function renderStats(): void {
   const count = (pred: (j: Job) => boolean) => jobs.filter(pred).length;
   const weekAgo = Date.now() - 7 * 86400_000;
-  const items: [string, number][] = [
-    ["Applied", count((j) => ["submitted", "interviewing", "offer", "rejected"].includes(j.status))],
-    ["This week", count((j) => !!j.appliedAt && j.appliedAt > weekAgo)],
-    ["Need you", count((j) => j.status === "needs_you" || j.status === "ready_to_submit")],
-    ["In progress", count((j) => j.status === "running")],
-    ["Queued", count((j) => j.status === "queued")],
-    ["Interviewing", count((j) => j.status === "interviewing")],
-    ["Offers", count((j) => j.status === "offer")],
+  const items: [CopyKey, number, string][] = [
+    ["theme.stat.applied", count((j) => ["submitted", "interviewing", "offer", "rejected"].includes(j.status)), "good"],
+    ["theme.stat.week", count((j) => !!j.appliedAt && j.appliedAt > weekAgo), ""],
+    ["theme.stat.needs", count((j) => j.status === "needs_you" || j.status === "ready_to_submit"), "crit"],
+    ["theme.stat.running", count((j) => j.status === "running"), ""],
+    ["theme.stat.queued", count((j) => j.status === "queued"), ""],
+    ["theme.stat.contact", count((j) => j.status === "interviewing"), "warm"],
+    ["theme.stat.offers", count((j) => j.status === "offer"), "good"],
   ];
-  $("#stats").replaceChildren(...items.map(([k, v]) => h("div", { className: "stat" }, h("b", { textContent: String(v) }), h("span", { textContent: k }))));
+  $("#stats").replaceChildren(
+    ...items.map(([k, v, cls]) => h("div", { className: `stat ${cls} ${v ? "" : "zero"}` }, h("b", { textContent: pad(v) }), h("span", { textContent: c(k) }))),
+  );
+}
+
+function statusSelect(j: Job): HTMLSelectElement {
+  const status = h("select", { className: `pill s-${j.status}` });
+  status.setAttribute("aria-label", "Status");
+  for (const s of JOB_STATUSES) status.append(h("option", { value: s, textContent: statusLabel(settings, s) }));
+  status.value = j.status;
+  status.addEventListener("change", () => void send({ type: "updateJob", jobId: j.id, patch: { status: status.value as JobStatus } }));
+  return status;
+}
+
+function jobLink(j: Job): HTMLAnchorElement {
+  return h("a", { href: j.url, target: "_blank", rel: "noopener", textContent: j.title || j.url.replace(/^https?:\/\//, "").slice(0, 60) });
 }
 
 function row(j: Job): HTMLTableRowElement {
-  const status = h("select");
-  for (const s of STATUSES) status.append(h("option", { value: s, textContent: STATUS_LABEL[s] }));
-  status.value = j.status;
-  status.className = `pill s-${j.status}`;
-  status.addEventListener("change", () => void send({ type: "updateJob", jobId: j.id, patch: { status: status.value as JobStatus } }));
-
   const notes = h("textarea", { value: j.notes, placeholder: "Notes…" });
+  notes.setAttribute("aria-label", "Notes");
   notes.addEventListener("focus", () => (editing = true));
   notes.addEventListener("blur", () => {
     editing = false;
@@ -51,60 +87,190 @@ function row(j: Job): HTMLTableRowElement {
     b.addEventListener("click", fn);
     actions.append(b);
   };
-  if (["running", "needs_you", "ready_to_submit"].includes(j.status)) act("Go to tab", () => void send({ type: "focusJob", jobId: j.id }));
-  if (["saved", "failed", "skipped"].includes(j.status)) act(j.status === "saved" ? "Start" : "Retry", () => void send({ type: "retryJob", jobId: j.id }));
-  act("Delete", () => confirm("Delete this job?") && void send({ type: "deleteJobs", jobIds: [j.id] }), "danger");
+  if (["running", "needs_you", "ready_to_submit"].includes(j.status)) act(c("theme.act.go"), () => void send({ type: "focusJob", jobId: j.id }));
+  if (["saved", "failed", "skipped"].includes(j.status)) act(j.status === "saved" ? c("theme.act.start") : c("theme.act.retry"), () => void send({ type: "retryJob", jobId: j.id }));
+  act(c("theme.act.delete"), () => confirm("Delete this job?") && void send({ type: "deleteJobs", jobIds: [j.id] }), "danger");
 
-  return h(
+  const tr = h(
     "tr",
     {},
     h(
       "td",
       {},
-      h("div", { className: "title" }, h("a", { href: j.url, target: "_blank", rel: "noopener", textContent: j.title || j.url.replace(/^https?:\/\//, "").slice(0, 60) })),
-      h("div", { className: "muted", textContent: [j.company, j.location].filter(Boolean).join(" · ") }),
+      h("div", { className: "tgt", textContent: tgt(j) }),
+      h("div", { className: "title" }, jobLink(j)),
+      h("div", { className: "where", textContent: [j.company, j.location].filter(Boolean).join(" · ") }),
     ),
-    h("td", {}, status, j.aiDrafted ? h("div", { className: "muted", textContent: `${j.aiDrafted} AI answer(s)` }) : ""),
-    h("td", { textContent: fmt(j.appliedAt) }),
-    h("td", { className: "muted", textContent: j.ats }),
+    h("td", {}, statusSelect(j), j.aiDrafted ? h("div", { className: "ai", textContent: c("theme.tracker.ai", { n: j.aiDrafted, s: j.aiDrafted === 1 ? "" : "s" }) }) : ""),
+    h("td", { className: "date", textContent: fmt(j.appliedAt) }),
+    h("td", { className: "src", textContent: j.ats }),
     h("td", { style: "min-width:180px" }, notes),
     h("td", {}, activity),
     h("td", {}, actions),
   );
+  tr.dataset.jobId = j.id;
+  tr.dataset.status = j.status;
+  return tr;
 }
 
-function renderRows(): void {
+function filtered(): Job[] {
   const q = $<HTMLInputElement>("#q").value.toLowerCase();
   const f = $<HTMLSelectElement>("#filter").value;
-  const list = jobs
+  return jobs
     .filter((j) => (f === "all" ? true : f === "active" ? ["running", "needs_you", "ready_to_submit", "queued"].includes(j.status) : j.status === f))
     .filter((j) => !q || `${j.company} ${j.title} ${j.notes} ${j.url}`.toLowerCase().includes(q))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+function renderRows(): void {
+  const list = filtered();
   const body = $("#rows");
   body.replaceChildren(...list.map(row));
-  if (!list.length) body.append(h("tr", {}, h("td", { colSpan: 7, className: "muted", textContent: "No jobs yet. Paste some URLs above." })));
+  if (!list.length) body.append(h("tr", {}, h("td", { colSpan: 7, className: "muted empty", textContent: c("theme.tracker.empty") })));
+}
+
+// --- board view -----------------------------------------------------------------
+
+function boardCard(j: Job): HTMLElement {
+  const card = h(
+    "article",
+    { className: `bcard`, draggable: true, tabIndex: 0 },
+    h("div", { className: "top" }, h("span", { className: "tgt", textContent: tgt(j) }), h("span", { textContent: j.ats.replace(/^(boards|jobs|careers)\./, "") })),
+    h("div", { className: "co", textContent: j.company || "—" }),
+    h("div", { className: "ti" }, jobLink(j)),
+    h(
+      "div",
+      { className: "meta" },
+      h("span", { className: `pill s-${j.status}`, textContent: statusLabel(settings, j.status) }),
+      h("span", { className: "when", textContent: fmt(j.appliedAt ?? j.updatedAt) }),
+    ),
+  );
+  card.dataset.jobId = j.id;
+  card.dataset.status = j.status;
+  if (["running", "needs_you", "ready_to_submit"].includes(j.status)) {
+    const go = h("button", { className: "go", type: "button", textContent: c("theme.act.go") });
+    go.addEventListener("click", () => void send({ type: "focusJob", jobId: j.id }));
+    card.append(go);
+  }
+  card.addEventListener("dragstart", (e) => {
+    dragging = j.id;
+    e.dataTransfer?.setData("text/plain", j.id);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    card.classList.add("dragging");
+    document.querySelectorAll(".bcol").forEach((col) => col.classList.add("dragging"));
+  });
+  card.addEventListener("dragend", () => {
+    dragging = null;
+    card.classList.remove("dragging");
+    document.querySelectorAll(".bcol").forEach((col) => col.classList.remove("dragging", "over"));
+  });
+  return card;
+}
+
+function boardColumn(col: BoardColumn, list: Job[], i: number): HTMLElement {
+  const collapsed = !!col.collapsed && !lostOpen;
+  const header = h(
+    "header",
+    {},
+    h("span", { className: "idx", textContent: pad(i + 1) }),
+    h("span", { className: "t", textContent: c(col.title) }),
+    h("span", { className: "n", textContent: pad(list.length) }),
+  );
+  const cards = h("div", { className: "cards" }, ...(list.length ? list.map(boardCard) : [h("div", { className: "none", textContent: c("theme.board.empty") })]));
+  const el = h("section", { className: `bcol ${collapsed ? "collapsed" : ""} ${col.drop ? "" : "nodrop"}` }, header, cards);
+  el.dataset.col = col.id;
+  el.setAttribute("aria-label", `${c(col.title)} (${list.length})`);
+  if (col.drop) el.title = c("theme.hint.drop");
+  if (col.collapsed) {
+    header.style.cursor = "pointer";
+    header.addEventListener("click", () => {
+      lostOpen = !lostOpen;
+      pref.set("aim.board.lostOpen", lostOpen ? "1" : "0");
+      renderBoard();
+    });
+  }
+  el.addEventListener("dragover", (e) => {
+    const job = jobs.find((x) => x.id === dragging);
+    if (!job || !dropStatus(job, col.id)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    el.classList.add("over");
+  });
+  el.addEventListener("dragleave", (e) => {
+    if (!el.contains(e.relatedTarget as Node | null)) el.classList.remove("over");
+  });
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    el.classList.remove("over");
+    const id = e.dataTransfer?.getData("text/plain") || dragging;
+    const job = jobs.find((x) => x.id === id);
+    const status = job && dropStatus(job, col.id);
+    if (!job || !status) return;
+    // Optimistic move; storage.onChanged re-renders with the real state.
+    job.status = status;
+    renderBoard();
+    toast(c("theme.toast.moved", { job: job.company || tgt(job), status: statusLabel(settings, status) }));
+    void send({ type: "updateJob", jobId: job.id, patch: { status } });
+  });
+  return el;
+}
+
+function renderBoard(): void {
+  const groups = groupForBoard(filtered());
+  $("#board").replaceChildren(...BOARD_COLUMNS.map((col, i) => boardColumn(col, groups[col.id], i)));
+}
+
+function renderView(): void {
+  $("#table-view").hidden = view !== "table";
+  $("#board").hidden = view !== "board";
+  $("#view-table").setAttribute("aria-pressed", String(view === "table"));
+  $("#view-board").setAttribute("aria-pressed", String(view === "board"));
+  if (view === "table") renderRows();
+  else renderBoard();
+}
+
+function renderFilter(): void {
+  const filter = $<HTMLSelectElement>("#filter");
+  const cur = filter.value || "all";
+  filter.replaceChildren(h("option", { value: "all", textContent: c("theme.filter.all") }), h("option", { value: "active", textContent: c("theme.filter.active") }));
+  for (const s of JOB_STATUSES) filter.append(h("option", { value: s, textContent: statusLabel(settings, s) }));
+  filter.value = cur;
 }
 
 async function load(): Promise<void> {
-  const raw = (await api.storage.local.get([STORAGE_KEYS.jobs, STORAGE_KEYS.settings])) as { jobs?: Job[]; settings?: Settings };
+  const raw = (await api.storage.local.get([STORAGE_KEYS.jobs, STORAGE_KEYS.settings])) as { jobs?: Job[]; settings?: unknown };
   jobs = raw.jobs ?? [];
-  $("#pause").textContent = { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) }.paused ? "Resume" : "Pause";
+  signs = callsigns(jobs);
+  const prevChud = settings.ui.chud;
+  settings = normalizeSettings(raw.settings);
+  applyCopy(settings);
+  if (prevChud !== settings.ui.chud || !$<HTMLSelectElement>("#filter").options.length) renderFilter();
+  $("#pause").textContent = settings.paused ? c("theme.resume") : c("theme.pause");
+  $("#pause").classList.toggle("primary", settings.paused);
   renderStats();
-  if (!editing) renderRows();
+  if (!editing && !dragging) renderView();
 }
 
-const filter = $<HTMLSelectElement>("#filter");
-filter.append(h("option", { value: "all", textContent: "All statuses" }), h("option", { value: "active", textContent: "Active" }));
-for (const s of STATUSES) filter.append(h("option", { value: s, textContent: STATUS_LABEL[s] }));
-filter.addEventListener("change", renderRows);
-$("#q").addEventListener("input", renderRows);
+$("#filter").addEventListener("change", renderView);
+$("#q").addEventListener("input", renderView);
+$("#view-table").addEventListener("click", () => {
+  view = "table";
+  pref.set("aim.tracker.view", view);
+  renderView();
+});
+$("#view-board").addEventListener("click", () => {
+  view = "board";
+  pref.set("aim.tracker.view", view);
+  renderView();
+});
 
 async function add(start: boolean): Promise<void> {
   const urls = extractUrls($<HTMLTextAreaElement>("#urls").value);
-  if (!urls.length) return toast("No URLs found");
+  if (!urls.length) return toast(c("theme.toast.noUrls"));
   const n = await send<number>({ type: "addJobs", urls, start });
   $<HTMLTextAreaElement>("#urls").value = "";
-  toast(`${start ? "Queued" : "Saved"} ${n} new job${n === 1 ? "" : "s"}${n < urls.length ? ` (${urls.length - n} already tracked)` : ""}`);
+  const k = urls.length - n;
+  toast(c(start ? "theme.toast.armed" : "theme.toast.marked", { n, s: n === 1 ? "" : "s", dup: k > 0 ? c("theme.toast.dup", { k }) : "" }));
 }
 $("#queue").addEventListener("click", () => void add(true));
 $("#save").addEventListener("click", () => void add(false));
@@ -119,13 +285,14 @@ $("#import-sheet").addEventListener("click", () => openSheetImport());
 $("#csv").addEventListener("click", () => download(`applications-${new Date().toISOString().slice(0, 10)}.csv`, jobsToCsv(jobs), "text/csv"));
 $("#settings").addEventListener("click", () => void api.runtime.openOptionsPage());
 $("#pause").addEventListener("click", async () => {
-  const raw = (await api.storage.local.get(STORAGE_KEYS.settings)) as { settings?: Settings };
-  await send({ type: "setPaused", paused: !{ ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) }.paused });
+  const raw = (await api.storage.local.get(STORAGE_KEYS.settings)) as { settings?: unknown };
+  await send({ type: "setPaused", paused: !normalizeSettings(raw.settings).paused });
 });
 
 api.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.jobs || changes.settings)) renderIntelFeed($("#intel-feed"));
-void load();
+  if (area !== "local") return;
+  if (changes.jobs || changes.settings || changes.intel) renderIntelFeed($("#intel-feed"));
+  void load();
 });
 renderIntelFeed($("#intel-feed"));
 void load();

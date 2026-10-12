@@ -5,11 +5,12 @@ import { normalizeProfile, normalizeSettings, STORAGE_KEYS } from "../shared/def
 import type { AnswerEntry, Job, Profile, Settings } from "../shared/types";
 import { uid } from "../shared/util";
 import { renderAiSetup } from "./aiSetup";
-import { $, download, h, send, toast } from "./common";
+import { copy } from "../shared/copy";
+import { $, applyCopy, download, h, send, setUi, toast } from "./common";
 import { extractResume, fileToBase64 } from "./extract";
 import { renderIntelSettings } from "./intelSettings";
 import { renderPrivacy } from "./privacy";
-import { type FieldSpec, PROFILE_GROUPS, renderEducation, renderFields, renderWork } from "./profileForm";
+import { control, type FieldSpec, PROFILE_GROUPS, renderEducation, renderFields, renderWork } from "./profileForm";
 
 const AUTOMATION: FieldSpec[] = [
   { key: "autoAdvance", label: "Click Next / Continue on multi-step forms", type: "checkbox" },
@@ -33,7 +34,25 @@ let dirty = false;
 
 function markDirty(): void {
   dirty = true;
-  $("#dirty").textContent = "Unsaved changes";
+  $("#dirty").textContent = copy(settings, "theme.dirty");
+}
+
+/** Interface toggles (settings.ui). Saved immediately, so every page switches wording at once. */
+function renderUi(): void {
+  // Update locally first so our own storage echo doesn't trigger a re-render.
+  const plain = control({ key: "plain", label: "Plain mode: normal wording instead of military call signs", type: "checkbox" }, !settings.ui.chud, (v) => {
+    settings.ui = { ...settings.ui, chud: !v };
+    applyCopy(settings);
+    if (dirty) markDirty();
+    void setUi({ chud: !v });
+  });
+  const sound = control({ key: "sound", label: "Sound: alert tones in the War Room", type: "checkbox" }, settings.ui.sound, (v) => {
+    settings.ui = { ...settings.ui, sound: !!v };
+    void setUi({ sound: !!v });
+  });
+  plain.querySelector("input")!.id = "opt-plain";
+  sound.querySelector("input")!.id = "opt-sound";
+  $("#ui-fields").replaceChildren(plain, sound);
 }
 
 function renderForms(): void {
@@ -44,6 +63,7 @@ function renderForms(): void {
   renderWork($("#work"), profile, markDirty);
   renderEducation($("#edu"), profile, markDirty);
   renderFields($("#automation-fields"), AUTOMATION, settings as unknown as Record<string, unknown>, markDirty);
+  renderUi();
   renderFields($("#ai-mode"), AI_MODE, settings as unknown as Record<string, unknown>, markDirty);
   renderAiSetup($("#ai-setup"), settings, markDirty, () => renderFields($("#ai-mode"), AI_MODE, settings as unknown as Record<string, unknown>, markDirty));
   $("#resume-name").textContent = profile.resume ? `Saved: ${profile.resume.name}` : "No file saved";
@@ -90,19 +110,21 @@ async function load(): Promise<void> {
   profile = normalizeProfile(raw.profile);
   settings = normalizeSettings(raw.settings);
   answers = raw.answers ?? [];
+  applyCopy(settings);
   renderForms();
   renderAnswers();
 }
 
 async function save(): Promise<void> {
-  // Don't clobber the pause toggle, which the popup/overlay own.
+  // Don't clobber the pause toggle or the interface toggles, which other pages own too.
   const cur = normalizeSettings(((await api.storage.local.get(STORAGE_KEYS.settings)) as { settings?: unknown }).settings);
   const cleaned = answers.filter((a) => a.question.trim() && a.answer.trim());
-  await api.storage.local.set({ profile, settings: { ...settings, paused: cur.paused }, answers: cleaned });
+  settings.ui = cur.ui;
+  await api.storage.local.set({ profile, settings: { ...settings, paused: cur.paused, ui: cur.ui }, answers: cleaned });
   answers = cleaned;
   dirty = false;
   $("#dirty").textContent = "";
-  toast("Saved");
+  toast(copy(settings, "theme.toast.saved"));
   void send({ type: "kick" });
 }
 
@@ -138,6 +160,17 @@ $("#resume-clear").addEventListener("click", () => {
   profile.resume = null;
   renderForms();
   markDirty();
+});
+
+// Plain mode / sound can also be flipped from the popup while this page is open.
+api.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.settings || !settings) return;
+  const ui = normalizeSettings(changes.settings.newValue).ui;
+  if (ui.chud === settings.ui.chud && ui.sound === settings.ui.sound) return;
+  settings.ui = ui;
+  applyCopy(settings);
+  renderUi();
+  if (dirty) markDirty();
 });
 
 $("#ans-filter").addEventListener("input", renderAnswers);
