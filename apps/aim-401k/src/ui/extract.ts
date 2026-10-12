@@ -1,5 +1,6 @@
 import * as pdfjs from "pdfjs-dist";
 import { fromJsonResume, isJsonResume, parseResumeText, type ResumeData } from "../core/resumeParse";
+import { unzipEntry } from "../core/zip";
 import { api } from "../shared/api";
 
 // Reads a resume file entirely in the browser: PDF (pdf.js), DOCX (unzip +
@@ -47,47 +48,6 @@ async function pdfText(buf: ArrayBuffer): Promise<string> {
   }
   await doc.destroy();
   return pages.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
-}
-
-// --- minimal ZIP reader (enough for .docx) ----------------------------------
-
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-async function unzipEntry(buf: ArrayBuffer, wanted: string): Promise<Uint8Array | null> {
-  const v = new DataView(buf);
-  let eocd = -1;
-  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) {
-    if (v.getUint32(i, true) === 0x06054b50) {
-      eocd = i;
-      break;
-    }
-  }
-  if (eocd < 0) return null;
-  const count = v.getUint16(eocd + 10, true);
-  let p = v.getUint32(eocd + 16, true);
-  const dec = new TextDecoder();
-  for (let n = 0; n < count; n++) {
-    if (v.getUint32(p, true) !== 0x02014b50) return null;
-    const method = v.getUint16(p + 10, true);
-    const size = v.getUint32(p + 20, true);
-    const nameLen = v.getUint16(p + 28, true);
-    const extraLen = v.getUint16(p + 30, true);
-    const commentLen = v.getUint16(p + 32, true);
-    const local = v.getUint32(p + 42, true);
-    const name = dec.decode(new Uint8Array(buf, p + 46, nameLen));
-    if (name === wanted) {
-      const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
-      const data = new Uint8Array(buf, start, size);
-      if (method === 0) return data;
-      if (method === 8) return inflateRaw(data);
-      return null;
-    }
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-  return null;
 }
 
 async function docxText(buf: ArrayBuffer): Promise<string> {

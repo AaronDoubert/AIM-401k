@@ -335,7 +335,8 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
     case "importJobs": {
       const n = await mutate((s) => {
         const known = new Set(s.jobs.map((j) => j.id));
-        const incoming = msg.jobs.filter((j) => j && j.id && j.url && !known.has(j.id));
+        // url may be "" for spreadsheet rows without a link (pump() never opens those).
+        const incoming = msg.jobs.filter((j) => j && j.id && typeof j.url === "string" && !known.has(j.id));
         for (const j of incoming) {
           j.tabId = null;
           if (ACTIVE.includes(j.status)) j.status = "queued";

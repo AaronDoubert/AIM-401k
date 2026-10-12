@@ -204,6 +204,12 @@ export async function pump(): Promise<void> {
     const open = () => s.jobs.filter((j) => ACTIVE.includes(j.status) && j.tabId != null).length;
     const queued = s.jobs.filter((j) => j.status === "queued").sort((a, b) => a.createdAt - b.createdAt);
     for (const job of queued) {
+      if (!/^https?:\/\//i.test(job.url)) {
+        // e.g. a spreadsheet row imported without a link: nothing to open.
+        job.status = "saved";
+        log(job, "No link to open; add the posting URL to apply");
+        continue;
+      }
       if (running() >= Math.max(1, s.settings.concurrency) || open() >= Math.max(1, s.settings.maxOpenTabs)) break;
       try {
         const tab = await api.tabs.create({ url: job.url, active: false });
