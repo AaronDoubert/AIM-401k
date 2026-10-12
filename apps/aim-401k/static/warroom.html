@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en" data-mode="chud">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>WAR ROOM · AIM-401k</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="warroom.css" />
+</head>
+<body class="wr">
+  <div class="wr-banner"><span data-copy="warroom.banner">UNCLASSIFIED // FOUO · FOR OFFICIAL UNEMPLOYMENT ONLY</span></div>
+
+  <header class="wr-head">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="10.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+        <circle cx="16" cy="16" r="5" fill="none" stroke="currentColor" stroke-width="1" opacity=".5" />
+        <path d="M16 1.5v8M16 22.5v8M1.5 16h8M22.5 16h8" stroke="currentColor" stroke-width="1.4" />
+        <circle cx="16" cy="16" r="2.2" fill="#FF5F1F" />
+      </svg>
+      <div class="brand-text">
+        <h1 id="wr-title" data-copy="warroom.title">AIM-401k // OPERATION GAINFUL</h1>
+        <div class="clocks"><span id="wr-zulu" class="zulu">--:--:--Z</span><span id="wr-local" class="local"></span></div>
+      </div>
+    </div>
+    <div class="status">
+      <span id="wr-live" class="pip" data-state="live">LIVE</span>
+      <span id="wr-afk-pip" class="pip afk" hidden></span>
+      <span id="wr-counts" class="counts"></span>
+    </div>
+    <nav class="ctl" aria-label="War Room controls">
+      <button id="wr-afk" class="wr-btn toggle" type="button" aria-pressed="false" data-copy="warroom.ctl.afk">AFK</button>
+      <div class="stepper" role="group" aria-labelledby="wr-units-lbl">
+        <span id="wr-units-lbl" class="lbl" data-copy="warroom.ctl.units">UNITS</span>
+        <button id="wr-units-dec" class="wr-btn step" type="button" aria-label="Fewer parallel tabs">−</button>
+        <output id="wr-units" aria-live="polite">1</output>
+        <button id="wr-units-inc" class="wr-btn step" type="button" aria-label="More parallel tabs">+</button>
+      </div>
+      <button id="wr-pause" class="wr-btn" type="button" aria-pressed="false">HOLD FIRE</button>
+      <button id="wr-sound" class="wr-btn toggle" type="button" aria-pressed="false">AUDIO OFF</button>
+      <button id="wr-fs" class="wr-btn" type="button">FULLSCREEN</button>
+    </nav>
+  </header>
+
+  <div id="wr-afk-strip" class="afk-strip" hidden><span data-copy="warroom.afk_strip"></span></div>
+
+  <main class="wr-grid" id="warroom">
+    <section class="col-left">
+      <div class="panel frame radar-panel">
+        <div class="panel-head"><h2 data-copy="warroom.radar.title">AREA OF OPERATIONS</h2><span id="wr-radar-meta" class="meta"></span></div>
+        <div class="radar-wrap"><canvas id="wr-radar" role="img" aria-label="Radar of applications in progress"></canvas></div>
+        <div class="legend"><i class="lg-ok"></i><i class="lg-warn"></i><i class="lg-fire"></i><span data-copy="warroom.radar.legend"></span></div>
+      </div>
+
+      <div class="panel frame kill-panel">
+        <div class="panel-head"><h2 data-copy="warroom.kill.title">KILL SHEET</h2></div>
+        <div class="kills">
+          <div class="kill tone-ok"><b id="wr-k-delivered">000</b><span data-copy="warroom.kill.delivered">DELIVERED</span></div>
+          <div class="kill tone-fire"><b id="wr-k-contacts">000</b><span data-copy="warroom.kill.contacts">CONTACTS</span></div>
+          <div class="kill tone-bone"><b id="wr-k-secured">000</b><span data-copy="warroom.kill.secured">SECURED</span></div>
+          <div class="kill tone-alert"><b id="wr-k-lost">000</b><span data-copy="warroom.kill.lost">LOST</span></div>
+        </div>
+        <div class="rank">
+          <div id="wr-rank-insignia" class="insignia" aria-hidden="true"></div>
+          <div class="rank-body">
+            <div class="rank-top"><span class="lbl" data-copy="warroom.rank.label">RANK</span><b id="wr-rank">RECRUIT</b></div>
+            <div class="rank-bar"><i id="wr-rank-bar"></i></div>
+            <small id="wr-rank-next"></small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="col-center panel frame">
+      <div class="panel-head">
+        <h2 data-copy="warroom.units.title">DEPLOYED UNITS</h2>
+        <span id="wr-unit-summary" class="meta"></span>
+        <span class="meta hint" data-copy="warroom.units.hint"></span>
+      </div>
+      <div id="wr-tiles" class="tiles" hidden></div>
+      <div id="wr-empty" class="empty">
+        <div class="empty-reticle" aria-hidden="true"><i></i></div>
+        <b data-copy="warroom.units.empty">NO UNITS DEPLOYED</b>
+        <span data-copy="warroom.units.empty_sub"></span>
+      </div>
+    </section>
+
+    <section class="col-right">
+      <div class="panel frame log-panel">
+        <div class="panel-head"><h2 data-copy="warroom.log.title">OPS LOG</h2><div id="wr-chips" class="chips" role="group" aria-label="Filter the log"></div></div>
+        <div class="log-wrap">
+          <div id="wr-log" class="log" role="log" aria-live="polite" tabindex="0"></div>
+          <button id="wr-log-new" class="log-new" type="button" hidden></button>
+        </div>
+      </div>
+
+      <div class="panel frame arm-panel">
+        <div class="panel-head"><h2><label for="wr-arm-input" data-copy="warroom.arm.title">ARM TARGETS</label></h2><span id="wr-arm-count" class="meta"></span></div>
+        <textarea id="wr-arm-input" class="wr-input" rows="3" spellcheck="false" data-copy-placeholder="warroom.arm.placeholder"></textarea>
+        <button id="wr-arm-go" class="wr-btn primary arm-go" type="button" data-copy="warroom.arm.go">ARM</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wr-foot"><span data-copy="warroom.footer"></span><span id="wr-ver" class="ver"></span></footer>
+
+  <div id="wr-countdown" class="countdown" role="alertdialog" aria-labelledby="wr-cd-label" hidden>
+    <div class="cd-box frame">
+      <div id="wr-cd-label" class="cd-label" data-copy="warroom.arm.countdown">LAUNCH IN</div>
+      <div id="wr-cd-num" class="cd-num">3</div>
+      <div id="wr-cd-seq" class="cd-seq"></div>
+      <button id="wr-cd-abort" class="wr-btn" type="button" data-copy="warroom.arm.abort">ABORT</button>
+    </div>
+  </div>
+  <div id="wr-modal" class="modal" hidden></div>
+  <div class="toast" id="toast" role="status"></div>
+  <script type="module" src="warroom.js"></script>
+</body>
+</html>

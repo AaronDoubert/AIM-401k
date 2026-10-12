@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-chud="1">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIM-401k Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="tracker">
+  <header class="topbar">
+    <div class="brand">
+      <img class="mark" src="icons/icon.svg" alt="" width="26" height="26" />
+      <span class="wordmark">AIM-401k</span>
+      <span class="crumb" data-copy="theme.tracker">THEATER</span>
+    </div>
+    <div class="row">
+      <button id="pause" data-copy="theme.pause">HOLD FIRE</button>
+      <button id="csv" data-copy="theme.tracker.csv">EXPORT CSV</button>
+      <button id="settings" data-copy="theme.settings">LOADOUT</button>
+    </div>
+  </header>
+  <main>
+    <div class="page-head">
+      <h1><span data-copy="theme.tracker">THEATER</span><small data-copy-plain="theme.tracker">Tracker</small></h1>
+      <p class="muted" data-copy="theme.tracker.sub">Every target AIM-401k touched, plus anything you add or mark by hand.</p>
+    </div>
+
+    <section class="killsheet">
+      <div class="section-label micro" data-copy="theme.tracker.killsheet">KILL SHEET</div>
+      <div class="stats" id="stats"></div>
+    </section>
+
+    <div class="card add">
+      <div class="label"><span class="micro" data-copy="theme.tracker.acquire">ACQUIRE TARGETS</span><span class="muted" data-copy="theme.tracker.acquire.hint">Paste job posting or application URLs. Any text with links works.</span></div>
+      <textarea id="urls" aria-label="Job URLs" placeholder="https://boards.greenhouse.io/acme/jobs/123&#10;https://jobs.lever.co/acme/abc"></textarea>
+      <div class="btns">
+        <button class="primary" id="queue" data-copy="theme.tracker.queue">ARM &amp; ENGAGE</button>
+        <button id="save" data-copy="theme.tracker.save">MARK FOR LATER</button>
+        <button id="import-sheet" data-copy="theme.tracker.import">IMPORT SHEET</button>
+      </div>
+    </div>
+
+    <section id="intel-feed"></section>
+
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="View">
+        <button id="view-table" type="button" aria-pressed="true" data-copy="theme.view.table">TABLE</button>
+        <button id="view-board" type="button" aria-pressed="false" data-copy="theme.view.board">BOARD</button>
+      </div>
+      <input id="q" type="search" data-copy-ph="theme.tracker.search" placeholder="Search company, title, notes" aria-label="Search" />
+      <select id="filter" aria-label="Filter by status"></select>
+      <span class="spacer"></span>
+      <button id="start-saved" data-copy="theme.tracker.queueSaved">ENGAGE ALL MARKED</button>
+      <button id="clear-done" class="danger" data-copy="theme.tracker.clear">CLEAR LOSSES</button>
+    </div>
+
+    <div class="scroll" id="table-view">
+      <table>
+        <thead><tr>
+          <th data-copy="theme.col.role">TARGET</th>
+          <th data-copy="theme.col.status">STATUS</th>
+          <th data-copy="theme.col.applied">DELIVERED</th>
+          <th data-copy="theme.col.source">SOURCE</th>
+          <th data-copy="theme.col.notes">NOTES</th>
+          <th data-copy="theme.col.activity">ACTIVITY</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="board" id="board" hidden></div>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <script type="module" src="tracker.js"></script>
+</body>
+</html>

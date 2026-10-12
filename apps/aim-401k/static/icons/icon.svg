@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>AIM-401k</title>
+  <rect width="96" height="96" rx="10" fill="#0A0C0B"/>
+  <path d="M8 24V8h16M72 8h16v16M88 72v16H72M24 88H8V72" fill="none" stroke="#E8E6E1" stroke-opacity=".55" stroke-width="4"/>
+  <circle cx="48" cy="48" r="23" fill="none" stroke="#FF5F1F" stroke-width="7"/>
+  <path d="M48 14v22M48 60v22M14 48h22M60 48h22" stroke="#FF5F1F" stroke-width="7"/>
+  <rect x="44" y="44" width="8" height="8" fill="#FF5F1F"/>
+</svg>

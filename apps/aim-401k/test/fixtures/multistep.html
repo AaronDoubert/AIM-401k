@@ -1,0 +1,58 @@
+<!doctype html>
+<html><head><title>Data Engineer | Globex Careers</title></head>
+<body>
+<main>
+  <h1>Data Engineer</h1>
+  <div id="app"></div>
+</main>
+<script>
+  const app = document.getElementById("app");
+  const data = {};
+  function step1() {
+    app.innerHTML = `
+      <h2>Step 1 of 2: My Information</h2>
+      <div><label for="fn">Legal First Name *</label><input id="fn" aria-required="true"></div>
+      <div><label for="ln">Legal Last Name *</label><input id="ln" aria-required="true"></div>
+      <div><label for="em">Email Address *</label><input id="em" type="email" aria-required="true"></div>
+      <div><label id="country-l">Country *</label>
+        <button id="country" type="button" aria-haspopup="listbox" aria-labelledby="country-l" aria-required="true">Select One</button></div>
+      <button id="next" type="button">Save and Continue</button>`;
+    const btn = document.getElementById("country");
+    btn.onclick = () => {
+      const ul = document.createElement("ul");
+      ul.setAttribute("role", "listbox");
+      ["Canada", "Mexico", "United States of America"].forEach((c) => {
+        const li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.textContent = c;
+        li.onclick = () => { btn.textContent = c; data.country = c; ul.remove(); };
+        ul.appendChild(li);
+      });
+      document.body.appendChild(ul);
+    };
+    document.getElementById("next").onclick = () => {
+      data.fn = document.getElementById("fn").value;
+      data.ln = document.getElementById("ln").value;
+      data.em = document.getElementById("em").value;
+      if (!data.fn || !data.ln || !data.em || !data.country) { document.getElementById("fn").setAttribute("aria-invalid", "true"); return; }
+      step2();
+    };
+  }
+  function step2() {
+    app.innerHTML = `
+      <h2>Step 2 of 2: Application Questions</h2>
+      <div role="radiogroup" aria-labelledby="q1"><p id="q1">Are you at least 18 years of age? *</p>
+        <label><input type="radio" name="age" value="yes" required> Yes</label>
+        <label><input type="radio" name="age" value="no"> No</label></div>
+      <div><label for="hear">How did you hear about this position?</label>
+        <select id="hear"><option value="">Select one</option><option>LinkedIn</option><option>Company Website</option><option>Referral</option></select></div>
+      <button id="submit" type="button">Submit</button>`;
+    document.getElementById("submit").onclick = () => {
+      const age = document.querySelector("input[name=age]:checked");
+      if (!age) return;
+      document.body.innerHTML = "<h1>Application submitted</h1><p>Your application was submitted successfully. " + JSON.stringify(Object.assign(data, { age: age.value, hear: document.getElementById("hear").value })) + "</p>";
+    };
+  }
+  step1();
+</script>
+</body></html>

@@ -76,6 +76,10 @@ It provides:
   Together, Fireworks, Perplexity, Azure OpenAI, Ollama/LM Studio, and any custom
   OpenAI-compatible endpoint) across three wire formats, with tool-calling.
 
+### JobPilot Firefox extension (`apps/aim-401k`)
+
+A separate app in this workspace. It's a Firefox extension that fills and tracks job applications semi-autonomously, and pops up a small box on whatever tab you're on when it needs a human (questions it can't answer, signatures, consent, CAPTCHAs, final review). See [`apps/aim-401k/README.md`](apps/aim-401k/README.md).
+
 ## Build Phases
 
 - **Phase 0 (current)**: Monorepo scaffold, contract types, CommandEngine, RC LPF procedure, walking skeleton test

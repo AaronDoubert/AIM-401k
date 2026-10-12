@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><title>Apply - Senior Platform Engineer - Acme Robotics</title>
+<meta property="og:site_name" content="Acme Robotics"></head>
+<body>
+<main>
+  <h1>Senior Platform Engineer</h1>
+  <span class="company-name">Acme Robotics</span>
+  <form id="f">
+    <div><label for="first_name">First Name *</label><input id="first_name" name="first_name" required></div>
+    <div><label for="last_name">Last Name *</label><input id="last_name" name="last_name" required></div>
+    <div><label for="email">Email *</label><input id="email" name="email" type="email" required></div>
+    <div><label for="phone">Phone</label><input id="phone" name="phone" type="tel"></div>
+    <div><label for="resume">Resume/CV *</label><input id="resume" name="resume" type="file" style="display:none" required></div>
+    <div><label for="li">LinkedIn Profile</label><input id="li" name="urls[LinkedIn]"></div>
+    <div>
+      <label for="auth">Are you legally authorized to work in the United States? *</label>
+      <select id="auth" name="auth" required><option value="">Select...</option><option value="1">Yes</option><option value="0">No</option></select>
+    </div>
+    <fieldset>
+      <legend>Will you now or in the future require sponsorship for employment visa status? *</legend>
+      <label><input type="radio" name="sponsor" value="y" required> Yes</label>
+      <label><input type="radio" name="sponsor" value="n"> No</label>
+    </fieldset>
+    <div><label for="why">Why do you want to work at Acme Robotics? *</label><textarea id="why" name="why" required></textarea></div>
+    <div>
+      <label for="gender">Gender</label>
+      <select id="gender" name="gender"><option value="">Select...</option><option>Male</option><option>Female</option><option>Decline To Self Identify</option></select>
+    </div>
+    <div><label><input type="checkbox" id="cert" name="cert" required> I certify that the information provided is true and complete. *</label></div>
+    <button type="submit">Submit Application</button>
+  </form>
+</main>
+<script>
+  // Mimic a React-style controlled form: state only updates through input/change events.
+  const state = {};
+  document.getElementById("f").addEventListener("input", (e) => (state[e.target.name] = e.target.type === "checkbox" ? e.target.checked : e.target.value));
+  document.getElementById("f").addEventListener("change", (e) => (state[e.target.name] = e.target.type === "checkbox" ? e.target.checked : e.target.type === "file" ? e.target.files.length : e.target.value));
+  document.getElementById("f").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const need = ["first_name", "last_name", "email", "auth", "sponsor", "why", "cert", "resume"];
+    const missing = need.filter((k) => !state[k]);
+    if (missing.length) { alert("missing " + missing.join(",")); return; }
+    sessionStorage.setItem("submitted", JSON.stringify(state));
+    location.href = "/thanks.html";
+  });
+</script>
+</body></html>
