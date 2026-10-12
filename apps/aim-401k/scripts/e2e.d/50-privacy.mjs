@@ -54,7 +54,8 @@ export default async function (t) {
     const page = await ctx.newPage();
     await page.goto(`chrome-extension://${extId}/options.html#ai`);
     await page.waitForSelector("#ai-setup .provider");
-    const badges = await page.locator("#ai-setup .provider .pill").allInnerTexts();
+    // textContent: the theme uppercases .pill with CSS, which innerText would reflect.
+    const badges = (await page.locator("#ai-setup .provider .pill").allTextContents()).map((b) => b.trim());
     check(badges.join("|") === "Easiest free start|Most private|Best quality (paid)", `recommended-path badges (${badges.join(", ")})`);
     check(await page.locator("#ai-redact").isChecked(), "AI section shows the privacy guard, checked");
     await page.click('#ai-setup [data-provider="gemini"]');

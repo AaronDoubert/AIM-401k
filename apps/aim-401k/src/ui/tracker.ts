@@ -64,8 +64,11 @@ function statusSelect(j: Job): HTMLSelectElement {
   return status;
 }
 
-function jobLink(j: Job): HTMLAnchorElement {
-  return h("a", { href: j.url, target: "_blank", rel: "noopener", textContent: j.title || j.url.replace(/^https?:\/\//, "").slice(0, 60) });
+function jobLink(j: Job): HTMLElement {
+  const text = j.title || j.url.replace(/^https?:\/\//, "").slice(0, 60) || j.company || "Untitled";
+  // Spreadsheet rows may have no link; only real web links become anchors.
+  if (!/^https?:\/\//i.test(j.url)) return h("span", { textContent: text });
+  return h("a", { href: j.url, target: "_blank", rel: "noopener", textContent: text });
 }
 
 function row(j: Job): HTMLTableRowElement {

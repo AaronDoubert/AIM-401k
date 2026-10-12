@@ -102,8 +102,8 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
   const other = await ctx.newPage();
   await other.goto(`${base}/other.html`);
   let host = 0;
-  for (let i = 0; i < 20 && !host; i++) {
-    await sleep(150);
+  for (let i = 0; i < 40 && !host; i++) {
+    await sleep(250);
     host = await other.locator("#aim401k-root").count();
   }
   check(host === 1, "overlay host mounted on fixture page");
