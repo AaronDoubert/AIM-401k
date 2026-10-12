@@ -160,6 +160,16 @@ export interface IntelSettings {
 
 export type UnitPhase = "opening" | "recon" | "filling" | "advancing" | "holding" | "releasing" | "delivered" | "lost";
 
+/**
+ * One row of a unit's field checklist (War Room): what the autopilot did with
+ * each counted field on the current form step.
+ * ok = filled from profile/answers · ai = AI-drafted (review) · need = waiting on you · todo = not filled yet
+ */
+export interface FieldCheck {
+  label: string;
+  state: "ok" | "ai" | "need" | "todo";
+}
+
 export interface UnitState {
   jobId: string;
   phase: UnitPhase;
@@ -169,6 +179,8 @@ export interface UnitState {
   fieldsDone: number;
   /** Label of the field being filled right now. */
   currentField: string;
+  /** Field checklist for the current step (capped; absent until the form is scanned). */
+  fields?: FieldCheck[];
   updatedAt: number;
   /** Optional data: URL thumbnail of the tab (best effort). */
   thumb?: string;

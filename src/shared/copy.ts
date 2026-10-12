@@ -48,6 +48,9 @@ const BASE_CHUD = {
   "ops.offer": "OBJECTIVE SECURED · {job}",
   "ops.afk.on": "OPERATOR AFK. AUTONOMY ENGAGED",
   "ops.afk.off": "OPERATOR ON STATION",
+  "ops.moved": "MOVED · {job} → {status}",
+  "ops.winchester": "WINCHESTER · QUEUE EMPTY",
+  "ops.bingo": "BINGO · {provider} DAILY AI QUOTA SPENT",
 } as const;
 
 const CHUD = { ...BASE_CHUD, ...theme.CHUD, ...warroom.CHUD, ...intel.CHUD, ...sheet.CHUD, ...privacy.CHUD };
@@ -89,6 +92,9 @@ const BASE_PLAIN: Record<keyof typeof BASE_CHUD, string> = {
   "ops.offer": "Offer · {job}",
   "ops.afk.on": "Away mode on",
   "ops.afk.off": "Away mode off",
+  "ops.moved": "Moved · {job} → {status}",
+  "ops.winchester": "Queue empty: nothing left to apply to",
+  "ops.bingo": "{provider} daily AI limit reached",
 };
 
 const PLAIN: Record<CopyKey, string> = { ...BASE_PLAIN, ...theme.PLAIN, ...warroom.PLAIN, ...intel.PLAIN, ...sheet.PLAIN, ...privacy.PLAIN };
