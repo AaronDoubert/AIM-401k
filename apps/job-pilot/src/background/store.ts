@@ -1,5 +1,5 @@
 import { api } from "../shared/api";
-import { DEFAULT_PROFILE, DEFAULT_SETTINGS, STORAGE_KEYS } from "../shared/defaults";
+import { normalizeProfile, normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
 import type { AnswerEntry, Job, Need, Profile, Settings } from "../shared/types";
 
 export interface State {
@@ -21,8 +21,8 @@ const lastWritten: Partial<Record<Key, string>> = {};
 async function readAll(): Promise<State> {
   const raw = (await api.storage.local.get(KEYS)) as Partial<State>;
   return {
-    profile: { ...DEFAULT_PROFILE, ...(raw.profile ?? {}) },
-    settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
+    profile: normalizeProfile(raw.profile),
+    settings: normalizeSettings(raw.settings),
     jobs: raw.jobs ?? [],
     answers: raw.answers ?? [],
     needs: raw.needs ?? [],
@@ -77,8 +77,8 @@ api.storage.onChanged.addListener((changes, area) => {
       const v = changes[k]!.newValue;
       lastWritten[k] = JSON.stringify(v);
       const c = cache as unknown as Record<string, unknown>;
-      if (k === "profile") c[k] = { ...DEFAULT_PROFILE, ...((v as object) ?? {}) };
-      else if (k === "settings") c[k] = { ...DEFAULT_SETTINGS, ...((v as object) ?? {}) };
+      if (k === "profile") c[k] = normalizeProfile(v);
+      else if (k === "settings") c[k] = normalizeSettings(v);
       else c[k] = v ?? [];
     }
   };

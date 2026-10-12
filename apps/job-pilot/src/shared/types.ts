@@ -10,14 +10,38 @@ export interface ResumeFile {
   data: string;
 }
 
+export interface WorkEntry {
+  company: string;
+  title: string;
+  location: string;
+  /** "YYYY-MM" (or "YYYY") */
+  startDate: string;
+  /** "YYYY-MM"; empty when current */
+  endDate: string;
+  current: boolean;
+  description: string;
+}
+
+export interface EducationEntry {
+  school: string;
+  degree: string;
+  field: string;
+  /** "YYYY-MM" (or "YYYY") */
+  startDate: string;
+  endDate: string;
+  gpa: string;
+}
+
 export interface Profile {
   firstName: string;
+  middleName: string;
   lastName: string;
   preferredName: string;
   pronouns: string;
   email: string;
   phone: string;
   street: string;
+  addressLine2: string;
   city: string;
   state: string;
   postalCode: string;
@@ -25,19 +49,31 @@ export interface Profile {
   linkedin: string;
   github: string;
   portfolio: string;
-  currentTitle: string;
-  currentCompany: string;
+  /** Most recent first. */
+  workHistory: WorkEntry[];
+  /** Most recent / highest first. */
+  education: EducationEntry[];
   yearsExperience: string;
-  school: string;
-  degree: string;
-  major: string;
-  graduationYear: string;
+  skills: string;
+  certifications: string;
+  languages: string;
   workAuthorized: YesNo;
   requiresSponsorship: YesNo;
+  /** Free text, e.g. "US Citizen", "Green card", "H-1B (transfer)". */
+  citizenship: string;
   over18: YesNo;
   willingToRelocate: YesNo;
+  driversLicense: YesNo;
+  securityClearance: string;
+  /** "Remote" | "Hybrid" | "On-site" | "Any" */
+  workplacePreference: string;
+  desiredTitles: string;
+  desiredLocations: string;
   salaryExpectation: string;
-  startDate: string;
+  /** Earliest start, "YYYY-MM-DD". Empty = derive from notice period. */
+  earliestStartDate: string;
+  /** Free text, e.g. "2 weeks". Used for text start-date questions. */
+  noticePeriod: string;
   howDidYouHear: string;
   gender: string;
   race: string;
@@ -79,10 +115,19 @@ export interface Settings {
   /** Fill optional (non-required) questions too when we know the answer. */
   fillOptional: boolean;
   llmMode: LlmMode;
-  anthropicApiKey: string;
-  model: string;
+  aiProvider: ProviderId;
+  /** API key per provider (only read by the background script). */
+  apiKeys: Partial<Record<ProviderId, string>>;
+  /** Model per provider. */
+  models: Partial<Record<ProviderId, string>>;
+  /** Base URL for the "custom" / "ollama" providers. */
+  customBaseUrl: string;
   effort: "low" | "medium" | "high";
+  /** Set once the onboarding wizard has been completed or dismissed. */
+  onboarded: boolean;
 }
+
+export type ProviderId = "gemini" | "groq" | "openrouter" | "github" | "mistral" | "ollama" | "anthropic" | "custom";
 
 export type JobStatus =
   | "saved"
@@ -144,7 +189,7 @@ export interface Need {
   frameId: number;
   /** Stable key of the field this need is about (question/consent/signature). */
   fieldKey?: string;
-  inputType?: "text" | "textarea" | "choice" | "multi";
+  inputType?: "text" | "textarea" | "choice" | "multi" | "date";
   options?: string[];
   createdAt: number;
 }

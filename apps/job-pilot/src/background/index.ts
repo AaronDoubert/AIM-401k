@@ -3,7 +3,8 @@ import { api } from "../shared/api";
 import type { ContentContext, NeedInput, OverlayState, PublicSettings, ToBackground, ToContent } from "../shared/messages";
 import type { Job, JobStatus, Need } from "../shared/types";
 import { uid } from "../shared/util";
-import { draftAnswer } from "./llm";
+import { aiReady, listModels, testConnection } from "./ai";
+import { draftAnswer, parseResumeWithAi } from "./tasks";
 import { getState, mutate, type State } from "./store";
 
 const ACTIVE: JobStatus[] = ["running", "needs_you", "ready_to_submit"];
@@ -54,8 +55,8 @@ function statusFromNeeds(s: State, jobId: string): JobStatus {
 }
 
 function publicSettings(s: State): PublicSettings {
-  const { anthropicApiKey, ...rest } = s.settings;
-  return { ...rest, hasApiKey: !!anthropicApiKey };
+  const { apiKeys: _keys, ...rest } = s.settings;
+  return { ...rest, hasApiKey: aiReady(s.settings) };
 }
 
 function overlayState(s: State): OverlayState {
@@ -482,6 +483,27 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
     case "kick":
       await pump();
       return true;
+
+    case "testAi":
+      return testConnection((await getState()).settings, msg.override);
+
+    case "listModels":
+      try {
+        return { ok: true, models: await listModels((await getState()).settings, msg.override) };
+      } catch (e) {
+        return { ok: false, models: [], message: e instanceof Error ? e.message : String(e) };
+      }
+
+    case "parseResume":
+      try {
+        return { ok: true, data: await parseResumeWithAi(msg.text, (await getState()).settings) };
+      } catch (e) {
+        return { ok: false, message: e instanceof Error ? e.message : String(e) };
+      }
+
+    case "openOnboarding":
+      await api.tabs.create({ url: api.runtime.getURL("onboarding.html") });
+      return true;
   }
   return undefined;
 }
@@ -553,6 +575,10 @@ api.notifications.onClicked.addListener((id) => {
     const need = s.needs.find((n) => n.id === id);
     if (need) await handle({ type: "focusJob", jobId: need.jobId }, {} as Sender);
   })();
+});
+
+api.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") void api.tabs.create({ url: api.runtime.getURL("onboarding.html") });
 });
 
 api.runtime.onStartup?.addListener(() => {

@@ -33,7 +33,7 @@ const CSS = `
 .kind.review_submit { background: #dcfce7; color: #166534; }
 .kind.question { background: #fef3c7; color: #92400e; }
 .prompt { font-size: 13px; line-height: 1.35; margin: 4px 0 8px; white-space: pre-wrap; word-break: break-word; }
-input[type=text], textarea, select { width: 100%; font-size: 13px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; color: #0f172a; background: #fff; }
+input[type=text], input[type=date], textarea, select { width: 100%; font-size: 13px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; color: #0f172a; background: #fff; }
 textarea { min-height: 70px; resize: vertical; }
 .detail { font-size: 12px; color: #b45309; margin: -4px 0 8px; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
@@ -181,7 +181,7 @@ export class Overlay {
           }, "primary"),
         );
       } else {
-        const input = need.inputType === "textarea" ? el("textarea") : el("input", { type: "text" });
+        const input = need.inputType === "textarea" ? el("textarea") : el("input", { type: need.inputType === "date" ? "date" : "text" });
         input.placeholder = need.kind === "signature" ? "Type your full legal name to sign" : "Your answer";
         input.value = this.drafts.get(need.id) ?? "";
         input.addEventListener("input", () => this.drafts.set(need.id, input.value));

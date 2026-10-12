@@ -1,7 +1,9 @@
-import type { AnswerEntry, Profile } from "../shared/types";
+import { currentJob } from "../shared/defaults";
+import type { AnswerEntry, EducationEntry, Profile, WorkEntry } from "../shared/types";
 import { interpolate } from "../shared/util";
 import { findAnswer } from "./answerBank";
 import { chooseOption } from "./choose";
+import { formatDate, isPresent, parseDate, relativeToDate, toIso, todayParts } from "./dates";
 import { cleanLabel, norm } from "./text";
 
 export type FieldKind =
@@ -17,7 +19,9 @@ export type FieldKind =
   | "checkbox"
   | "checkboxGroup"
   | "file"
-  | "combobox";
+  | "combobox"
+  /** Several boxes/selects that together make one date (Month / Day / Year). */
+  | "dateParts";
 
 /** DOM-independent description of a form field, produced by the scanner. */
 export interface FieldInfo {
@@ -30,6 +34,14 @@ export interface FieldInfo {
   placeholder: string;
   required: boolean;
   options: string[];
+  /** Format for date-like text inputs, e.g. "MM/DD/YYYY" (native date inputs: "YYYY-MM-DD"). */
+  datePattern?: string;
+  /** For dateParts: which part each element holds. */
+  parts?: ("m" | "d" | "y")[];
+  /** Nearest section heading above the field ("Work Experience 2", "Education"…). */
+  section?: string;
+  /** 0-based entry index for repeated sections (2nd job → 1). */
+  sectionIndex?: number;
 }
 
 export interface JobCtx {
@@ -41,9 +53,11 @@ export type Resolution =
   | { type: "value"; value: string; source: "profile" | "bank" | "template" }
   | { type: "resume" }
   | { type: "human"; kind: "question" | "consent" | "signature"; reason: string }
+  /** Deliberately left blank (e.g. end date of your current job). */
+  | { type: "skip" }
   | { type: "unknown" };
 
-type ValueFn = (p: Profile, ctx: JobCtx) => string;
+type ValueFn = (p: Profile, ctx: JobCtx, f: FieldInfo) => string;
 
 interface Rule {
   id: string;
@@ -72,11 +86,34 @@ const sameCountry = (label: string, p: Profile): boolean => {
 };
 
 const yn = (v: string): string => (v === "yes" ? "Yes" : v === "no" ? "No" : "");
-const fullName: ValueFn = (p) => [p.firstName, p.lastName].filter(Boolean).join(" ");
+const fullName = (p: Profile): string => [p.firstName, p.lastName].filter(Boolean).join(" ");
+const job = (p: Profile): WorkEntry | undefined => currentJob(p);
+const edu = (p: Profile, i = 0): EducationEntry | undefined => p.education[i] ?? p.education[0];
+
+export function isDateField(f: FieldInfo): boolean {
+  return f.kind === "date" || f.kind === "dateParts" || (f.kind === "text" && !!f.datePattern);
+}
+
+/** Years of experience: as entered, else computed from work history. */
+export function yearsOfExperience(p: Profile, today = new Date()): string {
+  if (p.yearsExperience) return p.yearsExperience;
+  const starts = p.workHistory.map((w) => parseDate(w.startDate, today)).filter((d) => d != null);
+  if (!starts.length) return "";
+  const first = starts.reduce((a, b) => (a.y * 12 + (a.m ?? 1) < b.y * 12 + (b.m ?? 1) ? a : b));
+  const months = today.getFullYear() * 12 + today.getMonth() + 1 - (first.y * 12 + (first.m ?? 1));
+  return String(Math.max(0, Math.floor(months / 12)));
+}
+
+/** Earliest start date as ISO: explicit date, else derived from the notice period. */
+export function startDateIso(p: Profile, today = new Date()): string {
+  const d = (p.earliestStartDate && parseDate(p.earliestStartDate, today)) || (p.noticePeriod && relativeToDate(p.noticePeriod, today));
+  return d ? toIso(d) : "";
+}
 
 // Order matters: the first matching rule wins.
 const RULES: Rule[] = [
   { id: "preferredName", re: /preferred (first )?name|nick ?name|name you go by/, value: (p) => p.preferredName || p.firstName },
+  { id: "middleName", re: /\bmiddle (name|initial)\b/, value: (p) => p.middleName },
   { id: "firstName", re: /\b(first|given|legal first|fore) ?name\b|^first$/, value: (p) => p.firstName },
   { id: "lastName", re: /\b(last|family|legal last|sur) ?name\b|^last$/, value: (p) => p.lastName },
   { id: "fullName", re: /^(your )?(full |legal |complete )?name$|\bfull (legal )?name\b|^legal name/, value: fullName },
@@ -91,22 +128,24 @@ const RULES: Rule[] = [
     re: /^(current )?location|where are you (currently )?(located|based)|^city state|current city/,
     value: (p) => [p.city, p.state].filter(Boolean).join(", "),
   },
+  { id: "address2", re: /address line 2|^address 2$|apartment|suite|apt/, value: (p) => p.addressLine2 },
   { id: "street", re: /street|address line 1|^address( 1)?$|^mailing address$|^home address$/, value: (p) => p.street },
   { id: "city", re: /^city\b|\bcity$|^town$/, value: (p) => p.city },
   { id: "state", re: /^state\b|\bstate$|province|^region$|state province/, value: (p) => p.state },
   { id: "postal", re: /\bzip\b|postal|post code|postcode/, value: (p) => p.postalCode },
   { id: "country", re: /^country\b|\bcountry$|country of residence/, value: (p) => p.country },
-  { id: "currentCompany", re: /(current|most recent|present) (company|employer)|^company( name)?$|^employer$/, value: (p) => p.currentCompany },
-  { id: "currentTitle", re: /(current|most recent|present) (job )?(title|role|position)|^job title$|^title$/, value: (p) => p.currentTitle },
+  { id: "currentCompany", re: /(current|most recent|present) (company|employer)|^company( name)?$|^employer$/, value: (p) => job(p)?.company ?? "" },
+  { id: "currentTitle", re: /(current|most recent|present) (job )?(title|role|position)|^job title$|^title$/, value: (p) => job(p)?.title ?? "" },
   {
     id: "years",
     re: /^(total )?years of (professional |relevant |work |industry )?experience$|^how many years of (professional |work |industry )?experience do you have$/,
-    value: (p) => p.yearsExperience,
+    value: (p) => yearsOfExperience(p),
   },
-  { id: "school", re: /\b(school|university|college|institution)\b/, value: (p) => p.school },
-  { id: "degree", re: /\bdegree\b|level of education|highest education/, value: (p) => p.degree },
-  { id: "major", re: /\bmajor\b|field of study|discipline|area of study/, value: (p) => p.major },
-  { id: "gradYear", re: /graduat/, value: (p) => p.graduationYear },
+  { id: "school", re: /\b(school|university|college|institution)\b/, value: (p) => edu(p)?.school ?? "" },
+  { id: "degree", re: /\bdegree\b|level of education|highest education/, value: (p) => edu(p)?.degree ?? "" },
+  { id: "major", re: /\bmajor\b|field of study|discipline|area of study/, value: (p) => edu(p)?.field ?? "" },
+  { id: "gpa", re: /\bgpa\b|grade point/, value: (p) => edu(p)?.gpa ?? "" },
+  { id: "gradYear", re: /graduat/, value: (p) => (edu(p)?.endDate ?? "").slice(0, 4) },
   {
     id: "workAuthorized",
     re: /(legally )?(authori[sz]ed|eligible|permitted|entitled) to work|work authori[sz]ation|right to work|work permit/,
@@ -114,28 +153,100 @@ const RULES: Rule[] = [
     guard: sameCountry,
   },
   { id: "sponsorship", re: /sponsor/, value: (p) => yn(p.requiresSponsorship), guard: sameCountry },
+  { id: "citizenship", re: /citizenship|visa (status|type)|immigration status/, value: (p) => p.citizenship },
   { id: "over18", re: /\b(18|eighteen)\b.*(years|older|age)|at least 18|of legal age/, value: (p) => yn(p.over18) },
   { id: "relocate", re: /relocat/, value: (p) => yn(p.willingToRelocate) },
+  { id: "license", re: /driver'?s? licen[cs]e/, value: (p) => yn(p.driversLicense) },
+  { id: "clearance", re: /security clearance/, value: (p) => p.securityClearance },
+  {
+    id: "workplace",
+    re: /work(place)? (arrangement|preference|setting|model|location type)|remote,? hybrid|preferred work (style|environment)/,
+    value: (p) => p.workplacePreference,
+  },
+  { id: "desiredLocation", re: /(preferred|desired) (work )?locations?/, value: (p) => p.desiredLocations },
   { id: "salary", re: /salary|compensation|pay (expectation|requirement|range)|desired pay|expected pay/, value: (p) => p.salaryExpectation },
-  { id: "startDate", re: /start date|available to start|earliest (start|availab)|notice period|when can you (start|begin)|availability to start/, value: (p) => p.startDate },
+  {
+    id: "startDate",
+    re: /start date|available to start|earliest (start|availab)|notice period|when can you (start|begin)|availability to start|date available/,
+    value: (p) => p.noticePeriod || (startDateIso(p) ? formatDate(parseDate(startDateIso(p))!, "MM/DD/YYYY") : ""),
+  },
   { id: "howHeard", re: /how did you (hear|find|learn|come across)|where did you (hear|find|see)/, value: (p) => p.howDidYouHear },
   { id: "hispanic", re: /hispanic|latin[oax]/, value: (p) => p.hispanicLatino },
   { id: "gender", re: /\bgender\b|\bsex\b/, value: (p) => p.gender },
   { id: "race", re: /\brace\b|ethnicit/, value: (p) => p.race },
   { id: "veteran", re: /veteran|military|armed forces/, value: (p) => p.veteranStatus },
   { id: "disability", re: /disabilit/, value: (p) => p.disabilityStatus },
+  { id: "skills", re: /^(key |technical |relevant )?skills$|list your skills/, value: (p) => p.skills },
+  { id: "languages", re: /^languages?( spoken)?$|what languages do you speak/, value: (p) => p.languages },
+  { id: "certifications", re: /^(licenses (and|&) )?certifications?$/, value: (p) => p.certifications },
   {
     id: "coverLetter",
     re: /cover letter|letter of (interest|motivation)/,
     kinds: ["textarea"],
-    value: (p, ctx) => interpolate(p.coverLetterTemplate, { ...ctx, firstName: p.firstName, lastName: p.lastName, name: fullName(p, ctx) }),
+    value: (p, ctx) => interpolate(p.coverLetterTemplate, { ...ctx, firstName: p.firstName, lastName: p.lastName, name: fullName(p) }),
   },
 ];
+
+// Matched against the whole (normalized) heading, so a question that merely
+// mentions "employment" doesn't turn the rest of the form into a job block.
+const WORK_SECTION_RE = /^(my |your )?(work|professional|employment|job|relevant|prior)? ?(experience|history|employment)( \d+)?$|^employment( history)?( \d+)?$|^(previous|past) (employers?|employment|jobs?|positions?)( \d+)?$/;
+const EDU_SECTION_RE = /^(my |your )?(education|academic)( history| background| information)?( \d+)?$|^(school|university|college|degree)( \d+)?$/;
+
+/** Rules for fields inside a repeated "Work Experience N" / "Education N" block. */
+function sectionValue(f: FieldInfo, label: string, p: Profile): string | null | "skip" {
+  const section = norm(f.section ?? "");
+  const i = f.sectionIndex ?? 0;
+  const isDate = isDateField(f);
+  if (WORK_SECTION_RE.test(section) && !EDU_SECTION_RE.test(section)) {
+    const w = p.workHistory[i];
+    if (!w) return null;
+    if (f.kind === "checkbox" && /currently (work|employed)|current (job|role|position|employer)|i currently|still work|present/.test(label)) {
+      return w.current ? "checked" : "unchecked";
+    }
+    if (isDate) {
+      if (/\b(from|start|began|begin)\b/.test(label)) return w.startDate || null;
+      if (/\b(to|end|until|finish)\b/.test(label)) return w.current ? "skip" : w.endDate || null;
+      return null;
+    }
+    if (/\b(company|employer|organi[sz]ation)\b/.test(label)) return w.company;
+    if (/\b(title|position|role)\b/.test(label)) return w.title;
+    if (/\blocation|city\b/.test(label)) return w.location || null;
+    if (/description|responsibilit|summary|duties|accomplishments/.test(label)) return w.description || null;
+    return null;
+  }
+  if (EDU_SECTION_RE.test(section)) {
+    const e = p.education[i];
+    if (!e) return null;
+    if (isDate) {
+      if (/\b(from|start)\b/.test(label)) return e.startDate || null;
+      if (/\b(to|end|graduat|completion|expected)\b/.test(label)) return e.endDate || null;
+      return null;
+    }
+    if (/\b(school|university|college|institution)\b/.test(label)) return e.school;
+    if (/\bdegree\b/.test(label)) return e.degree;
+    if (/major|field of study|discipline|area of study/.test(label)) return e.field;
+    if (/\bgpa\b|grade/.test(label)) return e.gpa || null;
+    return null;
+  }
+  return null;
+}
+
+/** What date a date-typed field wants, as ISO; "human"/"skip"/null for special cases. */
+function dateValue(f: FieldInfo, label: string, p: Profile, today: Date): string | "human" | "skip" | null {
+  if (/birth|\bdob\b/.test(label)) return "human";
+  const sec = sectionValue(f, label, p);
+  if (sec === "skip") return "skip";
+  if (sec) return isPresent(sec) ? "skip" : sec;
+  if (/^(today'?s )?date$|date signed|signature date|^date of (signature|application)$|^todays date$/.test(label)) return toIso(todayParts(today));
+  if (/start|availab|begin|join/.test(label)) return startDateIso(p, today) || null;
+  if (/graduat|completion/.test(label)) return edu(p)?.endDate || null;
+  return null;
+}
 
 const AUTOCOMPLETE: Record<string, ValueFn> = {
   "given-name": (p) => p.firstName,
   "family-name": (p) => p.lastName,
-  name: fullName,
+  name: (p) => fullName(p),
   nickname: (p) => p.preferredName || p.firstName,
   email: (p) => p.email,
   tel: (p) => p.phone,
@@ -147,8 +258,10 @@ const AUTOCOMPLETE: Record<string, ValueFn> = {
   "postal-code": (p) => p.postalCode,
   country: (p) => p.country,
   "country-name": (p) => p.country,
-  organization: (p) => p.currentCompany,
-  "organization-title": (p) => p.currentTitle,
+  organization: (p) => job(p)?.company ?? "",
+  "organization-title": (p) => job(p)?.title ?? "",
+  "additional-name": (p) => p.middleName,
+  "address-line2": (p) => p.addressLine2,
   url: (p) => p.portfolio || p.linkedin,
 };
 
@@ -170,6 +283,10 @@ export function matchRule(field: FieldInfo, profile: Profile): Rule | null {
 /** Turn a desired answer into something valid for this field (option text for choices). */
 export function fitToField(field: FieldInfo, value: string): string | null {
   if (!value) return null;
+  if (isDateField(field)) {
+    const d = parseDate(value);
+    return d ? toIso(d) : null;
+  }
   if (field.kind === "select" || field.kind === "radio" || field.kind === "combobox") {
     if (!field.options.length) return value; // combobox options only appear after typing
     const i = chooseOption(value, field.options);
@@ -197,7 +314,7 @@ export function fitToField(field: FieldInfo, value: string): string | null {
  * Decide what to do with a field using only local knowledge (profile + saved
  * answers). Anything returning "unknown" may go to the AI drafter or the human.
  */
-export function resolveField(field: FieldInfo, profile: Profile, bank: AnswerEntry[], ctx: JobCtx): Resolution {
+export function resolveField(field: FieldInfo, profile: Profile, bank: AnswerEntry[], ctx: JobCtx, today = new Date()): Resolution {
   const label = norm(cleanLabel(field.label));
 
   if (field.kind === "file") {
@@ -220,6 +337,21 @@ export function resolveField(field: FieldInfo, profile: Profile, bank: AnswerEnt
     return { type: "human", kind: "consent", reason: "Needs your agreement" };
   }
 
+  // Repeated sections ("Work Experience 2 → Company") need the right entry,
+  // so they're resolved before the generic one-value-per-question rules.
+  if (isDateField(field)) {
+    const d = dateValue(field, label, profile, today);
+    if (d === "human") return { type: "human", kind: "question", reason: "Personal date" };
+    if (d === "skip") return { type: "skip" };
+    const fitted = d ? fitToField(field, d) : null;
+    if (fitted) return { type: "value", value: fitted, source: "profile" };
+  } else {
+    const sec = sectionValue(field, label, profile);
+    if (sec === "skip") return { type: "skip" };
+    const fitted = sec ? fitToField(field, sec) : null;
+    if (fitted) return { type: "value", value: fitted, source: "profile" };
+  }
+
   // Saved answers beat generic profile rules: they're the user's explicit choice
   // for this exact wording.
   const saved = findAnswer(field.label, bank);
@@ -231,13 +363,13 @@ export function resolveField(field: FieldInfo, profile: Profile, bank: AnswerEnt
   const ac = field.autocomplete.split(/\s+/).pop() ?? "";
   const acFn = AUTOCOMPLETE[ac];
   if (acFn && field.kind !== "checkbox") {
-    const fitted = fitToField(field, acFn(profile, ctx));
+    const fitted = fitToField(field, acFn(profile, ctx, field));
     if (fitted) return { type: "value", value: fitted, source: "profile" };
   }
 
   const rule = matchRule(field, profile);
   if (rule) {
-    const fitted = fitToField(field, rule.value(profile, ctx));
+    const fitted = fitToField(field, rule.value(profile, ctx, field));
     if (fitted) return { type: "value", value: fitted, source: rule.id === "coverLetter" ? "template" : "profile" };
   }
 

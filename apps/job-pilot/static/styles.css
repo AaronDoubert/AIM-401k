@@ -29,3 +29,15 @@ label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; colo
 .s-rejected, .s-skipped { color: var(--muted); text-decoration: line-through; }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.show { opacity: 1; }
+.row.spread { justify-content: space-between; }
+.wide { grid-column: 1 / -1; }
+.check { flex-direction: row !important; align-items: center; gap: 8px; color: var(--fg) !important; font-size: 13px !important; }
+.check input { width: auto; }
+.card.entry { margin-bottom: 10px; }
+.card.entry .grid { margin-top: 10px; }
+.providers { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.provider { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 10px; }
+.provider.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--danger); }
+a { color: var(--accent); }

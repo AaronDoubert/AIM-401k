@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
+    "pdfjs-dist": "^5.7.284",
     "zod": "^4.1.0"
   },
   "devDependencies": {

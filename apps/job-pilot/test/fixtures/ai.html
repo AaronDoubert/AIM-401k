@@ -1,0 +1,14 @@
+<!doctype html>
+<html><head><title>Apply - Initech</title></head>
+<body><main>
+  <h1>Backend Engineer</h1>
+  <span class="company-name">Initech</span>
+  <p>Initech builds TPS report infrastructure in Go.</p>
+  <form id="f">
+    <div><label for="name">Full name *</label><input id="name" required></div>
+    <div><label for="proj">Describe a project you are proud of *</label><textarea id="proj" required></textarea></div>
+    <button type="submit">Submit application</button>
+  </form>
+</main>
+<script>document.getElementById("f").addEventListener("submit", (e) => { e.preventDefault(); document.body.innerHTML = "<h1>Thank you for applying!</h1>"; });</script>
+</body></html>

@@ -170,6 +170,8 @@ export class Autopilot {
         inputType:
           f.info.kind === "file"
             ? undefined
+            : f.info.kind === "date" || f.info.kind === "dateParts"
+              ? "date"
             : kind === "consent"
               ? undefined
               : isChoice
@@ -187,6 +189,7 @@ export class Autopilot {
       if (isFilled(f)) continue;
       if (!f.info.required && !settings.fillOptional) continue;
       const r = resolveField(f.info, profile, answers, jobCtx);
+      if (r.type === "skip") continue;
 
       if (r.type === "value" || r.type === "resume") {
         const ok = await fillField(f, r.type === "value" ? r.value : "", profile.resume);

@@ -1,4 +1,5 @@
 import { chooseOption } from "../core/choose";
+import { formatDate, monthOption, parseDate, type DateParts } from "../core/dates";
 import type { ResumeFile } from "../shared/types";
 import { sleep } from "../shared/util";
 import { isVisible, optionLabel, queryAll, textOf } from "./dom";
@@ -160,6 +161,86 @@ async function fillCombobox(el: HTMLElement, value: string): Promise<boolean> {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// dates
+
+/** Type a string key by key, for widgets that ignore programmatic value changes. */
+function typeChars(el: HTMLInputElement, text: string): void {
+  setNativeValue(el, "");
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  let acc = "";
+  for (const ch of text) {
+    el.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: ch }));
+    acc += ch;
+    setter?.call(el, acc);
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, data: ch, inputType: "insertText" }));
+    el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: ch }));
+  }
+  fire(el, "change");
+  fire(el, "focusout");
+  fire(el, "blur");
+}
+
+interface FlatpickrLike {
+  setDate?: (d: string, triggerChange: boolean) => void;
+}
+
+/**
+ * Fill a single date box. Native date inputs take ISO; text boxes get the
+ * format their placeholder asks for. Read-only boxes belong to calendar
+ * widgets: use the widget's API when reachable (flatpickr), otherwise lift
+ * readonly just long enough to type the value.
+ */
+function fillDateInput(el: HTMLInputElement, d: DateParts, pattern: string): boolean {
+  const text = formatDate(d, pattern);
+  const want = (v: string) => v.replace(/\s/g, "") === text.replace(/\s/g, "");
+  if (el.readOnly) {
+    // Firefox content scripts can reach page objects through wrappedJSObject.
+    const page = (el as unknown as { wrappedJSObject?: { _flatpickr?: FlatpickrLike } }).wrappedJSObject ?? (el as unknown as { _flatpickr?: FlatpickrLike });
+    try {
+      page._flatpickr?.setDate?.(formatDate(d, "YYYY-MM-DD"), true);
+    } catch {
+      /* page object not reachable */
+    }
+    if (el.value) return true;
+    el.removeAttribute("readonly");
+    setNativeValue(el, text);
+    el.setAttribute("readonly", "");
+    return !!el.value;
+  }
+  setNativeValue(el, text);
+  if (want(el.value)) return true;
+  typeChars(el, text);
+  return !!el.value;
+}
+
+function fillDateParts(els: HTMLElement[], parts: ("m" | "d" | "y")[], d: DateParts): boolean {
+  let ok = true;
+  els.forEach((el, i) => {
+    const part = parts[i];
+    const n = part === "m" ? (d.m ?? 1) : part === "d" ? (d.d ?? 1) : d.y;
+    if (el instanceof HTMLSelectElement) {
+      const opts = Array.from(el.options);
+      const texts = opts.map((o) => o.text.trim());
+      let idx = part === "m" ? monthOption(texts, n) : texts.findIndex((t) => /^\d+$/.test(t) && Number(t) === n);
+      if (idx < 0) idx = opts.findIndex((o) => /^\d+$/.test(o.value) && Number(o.value) === n);
+      const opt = idx >= 0 ? opts[idx] : undefined;
+      if (!opt) {
+        ok = false;
+        return;
+      }
+      setNativeValue(el, opt.value);
+      return;
+    }
+    const input = el as HTMLInputElement;
+    const text = part === "y" ? String(n) : String(n).padStart(input.maxLength === 1 ? 1 : 2, "0");
+    setNativeValue(input, text);
+    if (input.value !== text) typeChars(input, text);
+    if (!input.value) ok = false;
+  });
+  return ok;
+}
+
 /** Fill one scanned field. Returns true when the value took. */
 export async function fillField(f: ScannedField, value: string, resume: ResumeFile | null): Promise<boolean> {
   const el = f.els[0];
@@ -185,6 +266,16 @@ export async function fillField(f: ScannedField, value: string, resume: ResumeFi
     case "combobox":
       ok = await fillCombobox(el, value);
       break;
+    case "date": {
+      const d = parseDate(value);
+      ok = !!d && fillDateInput(el as HTMLInputElement, d, f.info.datePattern ?? "YYYY-MM-DD");
+      break;
+    }
+    case "dateParts": {
+      const d = parseDate(value);
+      ok = !!d && fillDateParts(f.els, f.info.parts ?? [], d);
+      break;
+    }
     default: {
       const input = el as HTMLInputElement | HTMLTextAreaElement;
       const max = input.maxLength > 0 ? input.maxLength : Infinity;

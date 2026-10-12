@@ -12,17 +12,12 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(join(root, "static"), out, { recursive: true });
 
-const options = {
-  entryPoints: {
-    background: join(root, "src/background/index.ts"),
-    content: join(root, "src/content/index.ts"),
-    popup: join(root, "src/ui/popup.ts"),
-    options: join(root, "src/ui/options.ts"),
-    tracker: join(root, "src/ui/tracker.ts"),
-  },
+// pdf.js runs in a worker loaded from the extension package.
+cpSync(join(root, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"), join(out, "pdf.worker.min.mjs"));
+
+const common = {
   outdir: out,
   bundle: true,
-  format: "iife",
   target: ["firefox128", "chrome120"],
   sourcemap: watch ? "inline" : false,
   minify: false,
@@ -30,10 +25,34 @@ const options = {
   logLevel: "info",
 };
 
+// Background + content scripts: classic scripts (content scripts can't be modules).
+const scripts = {
+  ...common,
+  entryPoints: {
+    background: join(root, "src/background/index.ts"),
+    content: join(root, "src/content/index.ts"),
+    popup: join(root, "src/ui/popup.ts"),
+    tracker: join(root, "src/ui/tracker.ts"),
+  },
+  format: "iife",
+};
+
+// Pages that read resumes use pdf.js, which is an ES module: build them as
+// modules and share the pdf.js chunk.
+const pages = {
+  ...common,
+  entryPoints: {
+    options: join(root, "src/ui/options.ts"),
+    onboarding: join(root, "src/ui/onboarding.ts"),
+  },
+  format: "esm",
+  splitting: true,
+  chunkNames: "chunks/[name]-[hash]",
+};
+
 if (watch) {
-  const ctx = await context(options);
-  await ctx.watch();
+  for (const o of [scripts, pages]) await (await context(o)).watch();
   console.log("watching…");
 } else {
-  await build(options);
+  await Promise.all([build(scripts), build(pages)]);
 }

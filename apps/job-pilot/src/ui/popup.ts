@@ -1,6 +1,6 @@
 import { extractUrls } from "../core/csv";
 import { api } from "../shared/api";
-import { STORAGE_KEYS } from "../shared/defaults";
+import { normalizeProfile, normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
 import type { OverlayState } from "../shared/messages";
 import type { Job } from "../shared/types";
 import { $, h, send, toast } from "./common";
@@ -12,7 +12,13 @@ async function activeTab(): Promise<browser.tabs.Tab | undefined> {
 
 async function render(): Promise<void> {
   const state = await send<OverlayState>({ type: "getOverlayState" });
-  const { jobs = [] } = (await api.storage.local.get(STORAGE_KEYS.jobs)) as { jobs?: Job[] };
+  const { jobs = [], profile, settings } = (await api.storage.local.get([STORAGE_KEYS.jobs, STORAGE_KEYS.profile, STORAGE_KEYS.settings])) as {
+    jobs?: Job[];
+    profile?: unknown;
+    settings?: unknown;
+  };
+  const p = normalizeProfile(profile);
+  $("#setup").style.display = !normalizeSettings(settings).onboarded && !(p.firstName && p.email) ? "block" : "none";
   $("#n-needs").textContent = String(state.needs.length);
   $("#n-running").textContent = String(state.running);
   $("#n-queued").textContent = String(state.queued);
@@ -74,6 +80,7 @@ $("#add").addEventListener("click", async () => {
   await render();
 });
 
+$("#setup").addEventListener("click", () => void send({ type: "openOnboarding" }).then(() => window.close()));
 $("#tracker").addEventListener("click", () => void api.tabs.create({ url: api.runtime.getURL("tracker.html") }).then(() => window.close()));
 $("#options").addEventListener("click", () => void api.runtime.openOptionsPage().then(() => window.close()));
 

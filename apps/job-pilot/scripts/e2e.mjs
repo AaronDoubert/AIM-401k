@@ -25,7 +25,30 @@ try {
   ({ chromium } = require(join(process.execPath, "../../lib/node_modules/playwright")));
 }
 
+// A mock OpenAI-compatible AI provider, to exercise the "custom" provider path.
+const aiCalls = [];
+function mockAi(req, res) {
+  const json = (o) => {
+    res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
+    res.end(JSON.stringify(o));
+  };
+  if (req.url.endsWith("/models")) return json({ data: [{ id: "mock-model" }, { id: "mock-model-2" }] });
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const body = JSON.parse(raw || "{}");
+    aiCalls.push(body);
+    const user = body.messages?.find((m) => m.role === "user")?.content ?? "";
+    const reply = /Reply with \{"ok": true\}/.test(user)
+      ? { ok: true }
+      : { answer: "I rebuilt our billing pipeline in Go, cutting failures by 90%.", needs_human: false, reason: "From the resume" };
+    // Fenced like many chat models do, to exercise the JSON extraction.
+    json({ choices: [{ message: { role: "assistant", content: "```json\n" + JSON.stringify(reply) + "\n```" }, finish_reason: "stop" }] });
+  });
+}
+
 const server = createServer((req, res) => {
+  if ((req.url ?? "").startsWith("/v1/")) return mockAi(req, res);
   const file = (req.url ?? "/").split("?")[0].replace(/^\/+/, "") || "posting.html";
   let body;
   try {
@@ -61,6 +84,39 @@ try {
   const extId = new URL(sw.url()).host;
   if (process.env.E2E_DEBUG) sw.on("console", (m) => console.log("[sw]", m.text()));
 
+  // --- Onboarding: opens on install and imports a PDF resume ----------------
+  let onboard = ctx.pages().find((p) => p.url().includes("onboarding.html"));
+  for (let i = 0; !onboard && i < 20; i++) {
+    await sleep(250);
+    onboard = ctx.pages().find((p) => p.url().includes("onboarding.html"));
+  }
+  check(!!onboard, "onboarding wizard opened on install");
+  {
+    const { SAMPLE } = await import(join(root, "test/fixtures/sample-resume.mjs"));
+    const pdfPage = await ctx.newPage();
+    await pdfPage.setContent(`<html><body style="font:12px Helvetica, Arial, sans-serif; white-space:pre-wrap">${SAMPLE.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</body></html>`);
+    const pdfPath = join(userDir, "Ada-Lovelace-Resume.pdf");
+    await pdfPage.pdf({ path: pdfPath, format: "Letter" });
+    await pdfPage.close();
+    onboard ??= await ctx.newPage();
+    if (!onboard.url().includes("onboarding.html")) await onboard.goto(`chrome-extension://${extId}/onboarding.html`);
+    await onboard.waitForSelector("#file", { state: "attached" });
+    await onboard.setInputFiles("#file", pdfPath);
+    await onboard.waitForSelector("#found .card", { timeout: 15000 }).catch(() => {});
+    const found = await onboard.locator("#found").innerText();
+    console.log("   import summary:", found.replace(/\n+/g, " · "));
+    const p = (await onboard.evaluate(() => chrome.storage.local.get("profile"))).profile ?? {};
+    check(p.firstName === "Ada" && p.lastName === "Lovelace" && p.email === "ada@example.com", `PDF import: name/email (${p.firstName} ${p.lastName}, ${p.email})`);
+    check(p.workHistory?.length === 2 && p.workHistory[0].company === "Analytical Engines Inc" && p.workHistory[0].current, `PDF import: work history (${JSON.stringify(p.workHistory?.map((w) => [w.title, w.company, w.startDate]))})`);
+    check(p.education?.[0]?.school === "University of London", `PDF import: education (${p.education?.[0]?.school})`);
+    check(p.resume?.name === "Ada-Lovelace-Resume.pdf", "PDF import: resume file attached for uploads");
+    await onboard.click("#next");
+    await onboard.screenshot({ path: join(shots, "onboarding-about.png"), fullPage: true }).catch(() => {});
+    await onboard.click("#next");
+    await onboard.screenshot({ path: join(shots, "onboarding-experience.png"), fullPage: true }).catch(() => {});
+    await onboard.close();
+  }
+
   // An extension page gives us a runtime.sendMessage channel to the background.
   const ext = await ctx.newPage();
   await ext.goto(`chrome-extension://${extId}/tracker.html`);
@@ -95,8 +151,14 @@ try {
         howDidYouHear: "Company website",
         gender: "Decline to self-identify",
         resume: { name: "ada.pdf", type: "application/pdf", data: btoa("%PDF-1.4 fake") },
+        workHistory: [
+          { company: "Analytical Engines", title: "Engineer", location: "London", startDate: "2019-03", endDate: "", current: true, description: "" },
+          { company: "Babbage & Co", title: "Junior Engineer", location: "London", startDate: "2016-06", endDate: "2019-02", current: false, description: "" },
+        ],
+        education: [{ school: "University of London", degree: "Bachelor of Science", field: "Mathematics", startDate: "2012-09", endDate: "2016-05", gpa: "" }],
+        noticePeriod: "2 weeks",
       },
-      settings: { notifications: false, autoAdvance: true, autoSubmit: false, stallMinutes: 5 },
+      settings: { notifications: false, autoAdvance: true, autoSubmit: false, stallMinutes: 5, onboarded: true },
     }),
   );
 
@@ -181,6 +243,54 @@ try {
   await msg({ type: "addJobs", urls: [`${base}/apply.html?again=1`], start: true });
   s = await waitFor("job 3 ready", (s) => s.jobs[2]?.status === "ready_to_submit");
   check(s.needs.every((n) => n.kind === "review_submit"), "repeat questions answered from saved answers");
+
+  // --- Dates: native, typed, Workday-style split boxes, month/year selects ----
+  await msg({ type: "addJobs", urls: [`${base}/dates.html`], start: true });
+  await waitFor("dates job filled", (s) => s.jobs[3]?.status === "needs_you");
+  const datePage = ctx.pages().find((p) => p.url().includes("/dates.html"));
+  if (datePage) {
+    const v = await datePage.evaluate(() => {
+      const val = (id) => document.getElementById(id).value;
+      const [m, y] = [...document.querySelectorAll("[data-automation-id^=dateSection]")].map((e) => e.value);
+      return {
+        avail: val("avail"),
+        signed: val("signed"),
+        dob: val("dob"),
+        pick: val("pick"),
+        wd: `${m}/${y}`,
+        cur: document.getElementById("w1cur").checked,
+        w2: `${val("w2t")} @ ${val("w2c")} ${val("w2from")}–${val("w2to")}`,
+        grad: `${document.querySelector("select[name=grad_month]").value}/${document.querySelector("select[name=grad_year]").value}`,
+      };
+    });
+    const d = new Date(Date.now() + 14 * 86400000);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const t = new Date();
+    const us = `${String(t.getMonth() + 1).padStart(2, "0")}/${String(t.getDate()).padStart(2, "0")}/${t.getFullYear()}`;
+    check(v.avail === iso, `native date picker = notice period (${v.avail})`);
+    check(v.signed === us, `MM/DD/YYYY text date = today (${v.signed})`);
+    check(v.dob === "", "date of birth left for the human");
+    check(!!v.pick, `read-only calendar input filled (${v.pick})`);
+    check(v.wd === "03/2019" && v.cur, `Workday-style split date + "currently work here" (${v.wd}, ${v.cur})`);
+    check(v.w2 === "Junior Engineer @ Babbage & Co 06/2016–02/2019", `2nd work entry (${v.w2})`);
+    check(v.grad === "5/2016", `month/year selects (${v.grad})`);
+    await datePage.screenshot({ path: join(shots, "dates-filled.png"), fullPage: true }).catch(() => {});
+  }
+
+  // --- AI drafting through an OpenAI-compatible provider ----------------------
+  await ext.evaluate(async (baseUrl) => {
+    const { settings } = await chrome.storage.local.get("settings");
+    await chrome.storage.local.set({ settings: { ...settings, llmMode: "draft", aiProvider: "custom", customBaseUrl: baseUrl, models: { custom: "mock-model" } } });
+  }, `${base}/v1`);
+  const t = await msg({ type: "testAi" });
+  check(t.ok && t.models.includes("mock-model"), `AI connection test (${t.message})`);
+  await msg({ type: "addJobs", urls: [`${base}/ai.html`], start: true });
+  s = await waitFor("AI job ready", (s) => s.jobs[4]?.status === "ready_to_submit");
+  const aiPage = ctx.pages().find((p) => p.url().includes("/ai.html"));
+  const drafted = aiPage ? await aiPage.evaluate(() => document.getElementById("proj").value) : "";
+  check(/billing pipeline/.test(drafted) && s.jobs[4].aiDrafted === 1, `AI-drafted answer filled and flagged (${drafted.slice(0, 40)}…)`);
+  const draftCall = aiCalls.find((c) => /Describe a project/.test(JSON.stringify(c.messages)));
+  check(!!draftCall && /Analytical Engines/.test(JSON.stringify(draftCall.messages)) && /Initech/.test(JSON.stringify(draftCall.messages)), "AI prompt carried profile + job description");
 } catch (e) {
   failures++;
   console.error(e);

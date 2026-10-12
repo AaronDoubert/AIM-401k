@@ -1,4 +1,4 @@
-import type { AnswerEntry, Job, Need, NeedKind, PageMeta, Profile, Settings } from "./types";
+import type { AnswerEntry, Job, Need, NeedKind, PageMeta, Profile, ProviderId, Settings } from "./types";
 
 /** A need as reported by a content script (ids/timestamps assigned by background). */
 export interface NeedInput {
@@ -16,7 +16,15 @@ export type PageState =
   | "ready" // everything filled, final submit pending human review
   | "submitted"; // confirmation page detected
 
-export type PublicSettings = Omit<Settings, "anthropicApiKey"> & { hasApiKey: boolean };
+/** Settings as content scripts see them: no API keys, just whether AI is usable. */
+export type PublicSettings = Omit<Settings, "apiKeys"> & { hasApiKey: boolean };
+
+export interface AiOverride {
+  provider?: ProviderId;
+  key?: string;
+  model?: string;
+  baseUrl?: string;
+}
 
 export interface ContentContext {
   managed: boolean;
@@ -60,7 +68,11 @@ export type ToBackground =
   | { type: "updateJob"; jobId: string; patch: Partial<Pick<Job, "status" | "notes" | "company" | "title" | "location">> }
   | { type: "deleteJobs"; jobIds: string[] }
   | { type: "importJobs"; jobs: Job[] }
-  | { type: "kick" };
+  | { type: "kick" }
+  | { type: "testAi"; override?: AiOverride }
+  | { type: "listModels"; override?: AiOverride }
+  | { type: "parseResume"; text: string }
+  | { type: "openOnboarding" };
 
 export interface OverlayState {
   needs: Need[];
