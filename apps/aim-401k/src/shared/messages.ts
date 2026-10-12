@@ -88,7 +88,11 @@ export type ToBackground =
   | { type: "gmailDisconnect" }
   // Data & privacy (owner: background/data.ts)
   | { type: "getStorageReport" }
-  | { type: "wipeAll"; keep?: ("profile" | "answers" | "settings")[] };
+  | { type: "wipeAll"; keep?: ("profile" | "answers" | "settings")[] }
+  // Privacy & AI help (owner: background/data.ts)
+  | { type: "forgetAiKeys" }
+  | { type: "detectLocalAi" }
+  | { type: "getAiUsage" };
 
 /** Background -> extension pages (War Room, tracker): runtime broadcasts. */
 export type ToPages =
@@ -103,6 +107,38 @@ export interface StorageReport {
   hasResume: boolean;
   /** Hosts this extension has sent data to on purpose (AI provider etc.). */
   aiProvider: string | null;
+}
+
+/** Reply to `wipeAll`. */
+export interface WipeResult {
+  /** Storage keys that were removed. */
+  cleared: string[];
+  /** Job tabs the extension had opened and closed during the wipe. */
+  closedTabs: number;
+}
+
+/** One local model server probed by `detectLocalAi`. */
+export interface LocalAiServer {
+  /** Answered with 2xx. */
+  reachable: boolean;
+  /** Running but refused us (Ollama without OLLAMA_ORIGINS). */
+  forbidden: boolean;
+  /** OpenAI-compatible base URL to configure. */
+  baseUrl: string;
+  models: string[];
+}
+
+/** Reply to `detectLocalAi`. */
+export interface LocalAiDetection {
+  ollama: LocalAiServer;
+  lmstudio: LocalAiServer;
+}
+
+/** Reply to `getAiUsage`: AI requests sent today, per provider (local date). */
+export interface AiUsage {
+  /** "YYYY-MM-DD" (local time). */
+  day: string;
+  counts: Partial<Record<ProviderId, number>>;
 }
 
 export interface OverlayState {

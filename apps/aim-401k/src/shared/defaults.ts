@@ -72,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ui: { chud: true, sound: false },
   afk: false,
   intel: { gmailTab: true, outlookTab: true, gmailApi: false, gmailClientId: "", autoStatus: true, useAi: false, lastSync: 0 },
+  aiRedact: true,
 };
 
 export const STORAGE_KEYS = {

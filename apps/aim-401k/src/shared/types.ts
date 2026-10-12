@@ -129,6 +129,8 @@ export interface Settings {
   /** Operator away: War Room collects prompts, desktop pings are muted, sitrep on return. */
   afk: boolean;
   intel: IntelSettings;
+  /** Privacy guard: strip contact details (email, phone, street, postal code) from what's sent to AI. */
+  aiRedact: boolean;
 }
 
 export interface UiSettings {

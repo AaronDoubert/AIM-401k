@@ -22,14 +22,76 @@ Rules:
 - For free-text questions, write in the candidate's first-person voice, specific to this company and role, plain and professional with no clichés. Short fields: a phrase or one sentence. Long fields: 80-180 words unless the question asks otherwise.
 - Never answer EEO / demographic questions differently from what the profile states.`;
 
+// ---------------------------------------------------------------------------
+// Privacy guard ("Redact contact details before sending to AI", on by default).
+// An application question never needs the model to know how to reach you: the
+// form fields for email/phone/address are filled from the profile directly.
+
+/** Profile fields left out of AI prompts when redaction is on. */
+export const REDACTED_FIELDS = ["email", "phone", "street", "addressLine2", "postalCode"] as const;
+
+const EMAIL_RE = /[\w.%+-]+@[\w-]+(?:\.[\w-]+)+/g;
+// Phone shapes: international with a leading +, North American (with or
+// without a country code), and 7-digit local numbers with a - or . separator.
+// Dates ("2016-06", "2012 – 2016", "2026-10-12") don't match any of them.
+const PHONE_RES = [
+  /\+\d{1,3}(?:[\s.-]?\(?\d{1,4}\)?){2,5}(?!\d)/g,
+  /(?<![\d+])(?:1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}(?!\d)/g,
+  /(?<![\d+])\(\d{3}\)\d{3}\d{4}(?!\d)/g,
+  /(?<![\d.-])\d{3}[.-]\d{4}(?![\d.-])/g,
+];
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Replace email addresses and phone numbers in free text with [email] / [phone].
+ * When the profile is given, its own street address and postal code are
+ * replaced too wherever they appear verbatim (e.g. in the resume header).
+ */
+export function redactText(text: string, p?: Partial<Profile>): string {
+  if (!text) return text;
+  let out = text.replace(EMAIL_RE, "[email]");
+  for (const re of PHONE_RES) {
+    out = out.replace(re, (m) => {
+      const digits = m.replace(/\D/g, "").length;
+      return digits >= 7 && digits <= 15 ? "[phone]" : m;
+    });
+  }
+  if (p) {
+    for (const [value, label] of [
+      [p.email, "[email]"],
+      [p.phone, "[phone]"],
+      [p.street, "[address]"],
+      [p.addressLine2, "[address]"],
+      [p.postalCode, "[postal code]"],
+    ] as const) {
+      const v = (value ?? "").trim();
+      if (v.length >= 3) out = out.replace(new RegExp(`(?<![\\w])${escapeRe(v)}(?![\\w])`, "gi"), label);
+    }
+  }
+  return out;
+}
+
+export interface FactsOptions {
+  /** Privacy guard: omit contact fields and scrub emails/phones from free text. */
+  redact?: boolean;
+}
+
 /** Profile facts worth giving the model (drops file data and EEO answers). */
-export function candidateFacts(p: Profile, answers: AnswerEntry[]): string {
-  const { resume: _r, resumeText, coverLetterTemplate: _c, gender: _g, race: _ra, hispanicLatino: _h, veteranStatus: _v, disabilityStatus: _d, ...rest } = p;
-  const facts = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== "" && v != null && !(Array.isArray(v) && !v.length)));
+export function candidateFacts(p: Profile, answers: AnswerEntry[], opts: FactsOptions = {}): string {
+  const { resume: _r, resumeText: rawResume, coverLetterTemplate: _c, gender: _g, race: _ra, hispanicLatino: _h, veteranStatus: _v, disabilityStatus: _d, ...rest } = p;
+  const scrub = (t: string) => (opts.redact ? redactText(t, p) : t);
+  const hidden = new Set<string>(opts.redact ? REDACTED_FIELDS : []);
+  const facts = Object.fromEntries(
+    Object.entries(rest)
+      .filter(([k, v]) => !hidden.has(k) && v !== "" && v != null && !(Array.isArray(v) && !v.length))
+      .map(([k, v]) => [k, typeof v === "string" ? scrub(v) : k === "workHistory" ? p.workHistory.map((w) => ({ ...w, description: scrub(w.description) })) : v]),
+  );
+  const resumeText = scrub(rawResume);
   const saved = answers
     .filter((a) => a.source === "user")
     .slice(0, 40)
-    .map((a) => `Q: ${a.question}\nA: ${a.answer}`)
+    .map((a) => `Q: ${a.question}\nA: ${scrub(a.answer)}`)
     .join("\n\n");
   return [
     `<profile>\n${JSON.stringify(facts, null, 2)}\n</profile>`,
@@ -50,7 +112,8 @@ export async function draftAnswer(req: DraftRequest, profile: Profile, answers: 
     .join("\n");
   const job = `<job>\nCompany: ${req.meta.company}\nTitle: ${req.meta.title}\nLocation: ${req.meta.location}\n\n${req.meta.description}\n</job>`;
   try {
-    const out = await completeJson(settings, { schema: Draft, system: DRAFT_SYSTEM, context: [candidateFacts(profile, answers), job], prompt: question });
+    const facts = candidateFacts(profile, answers, { redact: settings.aiRedact });
+    const out = await completeJson(settings, { schema: Draft, system: DRAFT_SYSTEM, context: [facts, job], prompt: question });
     const answer = out.answer.trim();
     return { answer: answer || null, needsHuman: out.needs_human || !answer, reason: out.reason };
   } catch (e) {
@@ -105,11 +168,30 @@ const RESUME_SYSTEM = `You convert resume text into structured profile data.
 Copy facts exactly as written; never guess or embellish. Use "" for anything not present. List jobs and schools most recent first. Dates: YYYY-MM (or YYYY when only a year is given); a job with "Present"/"Current" has current=true and endDate "".`;
 
 export async function parseResumeWithAi(text: string, settings: Settings): Promise<ParsedResume> {
-  return completeJson(settings, {
+  // With the privacy guard on, the model reads a scrubbed copy; email and phone
+  // are then filled back in from the original text, locally.
+  const sent = settings.aiRedact ? redactText(text) : text;
+  const out = await completeJson(settings, {
     schema: ParsedResume,
     system: RESUME_SYSTEM,
-    context: [`<resume>\n${text.slice(0, 60000)}\n</resume>`],
+    context: [`<resume>\n${sent.slice(0, 60000)}\n</resume>`],
     prompt: "Extract the profile.",
     maxTokens: 8000,
   });
+  if (settings.aiRedact) restoreContact(out, text);
+  return out;
+}
+
+/** Put back the contact details the model only saw as [email] / [phone]. */
+export function restoreContact(out: Pick<ParsedResume, "email" | "phone">, original: string): void {
+  const email = original.match(new RegExp(EMAIL_RE.source))?.[0] ?? "";
+  let phone = "";
+  for (const re of PHONE_RES) {
+    for (const m of original.match(new RegExp(re.source, "g")) ?? []) {
+      const digits = m.replace(/\D/g, "").length;
+      if (!phone && digits >= 7 && digits <= 15) phone = m.trim();
+    }
+  }
+  if (!out.email || out.email.includes("[email]")) out.email = email;
+  if (!out.phone || out.phone.includes("[phone]")) out.phone = phone;
 }
