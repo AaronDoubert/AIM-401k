@@ -19,8 +19,26 @@ const KEYS = Object.keys(STORAGE_KEYS) as Key[];
 
 let cache: State | null = null;
 let lock: Promise<unknown> = Promise.resolve();
-/** JSON of what we last wrote per key, so our own storage.onChanged echoes are ignored. */
-const lastWritten: Partial<Record<Key, string>> = {};
+/**
+ * JSON of our own recent writes per key, so their storage.onChanged echoes are
+ * ignored. A queue, not just the last write: when a key is written twice in a
+ * row, the first echo arrives after the second write and must not be mistaken
+ * for an external change (that rolled the cache back and lost the second write).
+ */
+const ownWrites: Partial<Record<Key, string[]>> = {};
+function rememberWrite(k: Key, json: string): void {
+  const q = (ownWrites[k] ??= []);
+  q.push(json);
+  if (q.length > 50) q.shift();
+}
+/** True (and consumed) when this change is the echo of one of our writes. */
+function isOwnEcho(k: Key, json: string): boolean {
+  const q = ownWrites[k] ?? [];
+  const i = q.indexOf(json);
+  if (i < 0) return false;
+  q.splice(0, i + 1);
+  return true;
+}
 
 async function readAll(): Promise<State> {
   const raw = (await api.storage.local.get(KEYS)) as Partial<State>;
@@ -56,7 +74,7 @@ export function mutate<T>(fn: (s: State) => T | Promise<T>): Promise<T> {
       const json = JSON.stringify(cache[k]);
       if (json !== before[k]) {
         (changed as Record<string, unknown>)[k] = cache[k];
-        lastWritten[k] = json;
+        rememberWrite(k, json);
       }
     }
     if (Object.keys(changed).length) await api.storage.local.set(changed);
@@ -74,14 +92,13 @@ api.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   const external = KEYS.filter((k) => {
     const c = changes[k];
-    return c && "newValue" in c && JSON.stringify(c.newValue) !== lastWritten[k];
+    return c && "newValue" in c && !isOwnEcho(k, JSON.stringify(c.newValue));
   });
   if (!external.length) return;
   const apply = () => {
     if (!cache) return;
     for (const k of external) {
       const v = changes[k]!.newValue;
-      lastWritten[k] = JSON.stringify(v);
       const c = cache as unknown as Record<string, unknown>;
       if (k === "profile") c[k] = normalizeProfile(v);
       else if (k === "settings") c[k] = normalizeSettings(v);
