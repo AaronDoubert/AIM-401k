@@ -90,12 +90,19 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
 
   // Fonts are bundled (no network).
   const fonts = await opt.evaluate(async () => {
-    const files = ["archivo-latin-wdth-normal.woff2", "jetbrains-mono-latin-400-normal.woff2"];
+    const files = ["geist-latin-wght-normal.woff2", "geist-mono-latin-wght-normal.woff2"];
     const ok = await Promise.all(files.map((f) => fetch(`fonts/${f}`).then((r) => r.ok).catch(() => false)));
     const loaded = async (spec) => (await document.fonts.load(spec, "AIM")).some((f) => f.status === "loaded");
-    return { ok: ok.every(Boolean), mono: await loaded('12px "JetBrains Mono AIM"'), sans: await loaded('800 12px "Archivo AIM"') };
+    return { ok: ok.every(Boolean), mono: await loaded('12px "Geist Mono AIM"'), sans: await loaded('600 12px "Geist AIM"') };
   });
   check(fonts.ok && fonts.mono && fonts.sans, `bundled fonts load (${JSON.stringify(fonts)})`);
+  const logo = await opt.evaluate(async () => {
+    const img = document.querySelector("header img.wordmark");
+    if (!img) return { found: false };
+    await img.decode().catch(() => {});
+    return { found: true, w: img.naturalWidth, alt: img.alt };
+  });
+  check(logo.found && logo.w > 0 && logo.alt === "AIM-401k", `wordmark artwork renders (${JSON.stringify(logo)})`);
   await opt.close();
 
   // --- overlay host on a fixture page --------------------------------------------------

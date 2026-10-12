@@ -61,8 +61,8 @@ describe("copy()", () => {
   it("switches on settings.ui.chud and interpolates", () => {
     expect(copy({ ui: { chud: true } }, "status.submitted")).toBe("DELIVERED");
     expect(copy({ ui: { chud: false } }, "status.submitted")).toBe("Applied");
-    expect(copy(true, "theme.ov.pill.needs", { n: 2, s: "" })).toBe("AIM-401k · 2 HOLDING");
-    expect(copy(false, "theme.ov.pill.needs", { n: 1, s: "s" })).toBe("AIM-401k · 1 needs you");
+    expect(copy(true, "theme.ov.pill.needs", { n: 2, s: "" })).toBe("2 HOLDING");
+    expect(copy(false, "theme.ov.pill.needs", { n: 1, s: "s" })).toBe("1 needs you");
     expect(copy(false, "theme.tgt", { n: "0042" })).toBe("#0042");
     expect(copy(true, "theme.tgt", { n: "0042" })).toBe("TGT-0042");
   });

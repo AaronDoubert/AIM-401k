@@ -2,7 +2,7 @@
 // CHUD is the War Room skin; PLAIN is the same dashboard in normal words.
 export const CHUD = {
   "warroom.doc_title": "WAR ROOM · AIM-401k",
-  "warroom.title": "AIM-401k // OPERATION GAINFUL",
+  "warroom.title": "OPERATION GAINFUL",
   "warroom.banner": "UNCLASSIFIED // FOUO · FOR OFFICIAL UNEMPLOYMENT ONLY",
   "warroom.footer": "SYS NOMINAL · LOCAL-ONLY · NO TELEMETRY · ALL YOUR DATA STAYS IN THIS BROWSER",
   "warroom.live": "LIVE",
@@ -141,7 +141,7 @@ export const CHUD = {
 
 export const PLAIN: Record<keyof typeof CHUD, string> = {
   "warroom.doc_title": "Dashboard · AIM-401k",
-  "warroom.title": "AIM-401k · Dashboard",
+  "warroom.title": "Dashboard",
   "warroom.banner": "Everything runs locally in your browser",
   "warroom.footer": "Local only · no telemetry · your data stays in this browser",
   "warroom.live": "Live",

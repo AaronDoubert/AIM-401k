@@ -323,8 +323,8 @@ describe("warroom copy", () => {
   it("switches wording with settings.ui.chud", () => {
     const chud = DEFAULT_SETTINGS;
     const plain = { ...DEFAULT_SETTINGS, ui: { ...DEFAULT_SETTINGS.ui, chud: false } };
-    expect(copy(chud, "warroom.title")).toBe("AIM-401k // OPERATION GAINFUL");
-    expect(copy(plain, "warroom.title")).toBe("AIM-401k · Dashboard");
+    expect(copy(chud, "warroom.title")).toBe("OPERATION GAINFUL");
+    expect(copy(plain, "warroom.title")).toBe("Dashboard");
     expect(copy(chud, "warroom.op.title")).toBe("OPERATOR INPUT REQUIRED");
     expect(copy(plain, "warroom.op.title")).toBe("Needs your input");
     expect(copy(plain, "warroom.sitrep.line", { dur: "1h 05m", delivered: 3, holding: 1, contacts: 0, lost: 2 })).toBe(

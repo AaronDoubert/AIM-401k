@@ -45,11 +45,12 @@ describe("overlay hold-to-release", () => {
   it("renders the HUD in CHUD mode and plain mode", () => {
     const o = new Overlay();
     o.update(state(true));
-    expect(root().textContent).toContain("AIM-401k // OPERATOR INPUT REQUIRED");
+    expect(root().textContent).toContain("OPERATOR INPUT REQUIRED");
+    expect(root().querySelectorAll("svg.mark").length).toBeGreaterThan(0); // the supplied mark, not a typed logo
     expect(root().textContent).toContain("TGT · Acme Robotics · Platform Eng");
     expect(hold().textContent).toContain("HOLD TO RELEASE");
     o.update(state(false));
-    expect(root().textContent).toContain("AIM-401k needs you");
+    expect(root().textContent).toContain("Needs your input");
     expect(hold().textContent).toContain("Hold to submit");
   });
 

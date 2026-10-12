@@ -18,13 +18,16 @@ interface BlipState extends Blip {
   goneAt: number | null;
 }
 
+// Brand palette: the scope itself is off-white on near-black; signal colors mark status only.
 const C = {
-  green: "57,255,106",
-  amber: "255,176,0",
-  orange: "255,95,31",
-  red: "255,59,48",
-  bone: "232,230,225",
+  scope: "241,237,228",
+  bone: "241,237,228",
+  grey: "161,157,148",
+  ok: "134,192,149",
+  warn: "220,174,94",
+  alert: "236,95,72",
 };
+const FONT = '9px "Geist Mono AIM", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 const SWEEP_MS = 4200;
 const TRAIL = (Math.PI / 180) * 75;
@@ -34,15 +37,15 @@ const DELIVERED_MS = 7000;
 function colorOf(phase: DisplayPhase): string {
   switch (phase) {
     case "holding":
-      return C.amber;
+      return C.warn;
     case "releasing":
-      return C.orange;
-    case "lost":
-      return C.red;
-    case "delivered":
       return C.bone;
+    case "lost":
+      return C.alert;
+    case "delivered":
+      return C.ok;
     default:
-      return C.green;
+      return C.bone;
   }
 }
 
@@ -151,8 +154,8 @@ export class Radar {
   private drawScope(c: number, R: number): void {
     const { ctx } = this;
     const bg = ctx.createRadialGradient(c, c, 0, c, c, R);
-    bg.addColorStop(0, "rgba(20,34,26,.95)");
-    bg.addColorStop(1, "rgba(10,14,12,.95)");
+    bg.addColorStop(0, "rgba(24,23,21,.95)");
+    bg.addColorStop(1, "rgba(12,12,11,.95)");
     ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.arc(c, c, R, 0, Math.PI * 2);
@@ -166,7 +169,7 @@ export class Radar {
       [RING_RADIUS.inner, this.ringLabels[2]],
     ];
     ctx.setLineDash([2, 4]);
-    ctx.strokeStyle = `rgba(${C.green},.22)`;
+    ctx.strokeStyle = `rgba(${C.scope},.22)`;
     for (const [r] of rings) {
       ctx.beginPath();
       ctx.arc(c, c, r * R, 0, Math.PI * 2);
@@ -175,14 +178,14 @@ export class Radar {
     ctx.setLineDash([]);
 
     // Crosshairs + diagonals.
-    ctx.strokeStyle = `rgba(${C.green},.12)`;
+    ctx.strokeStyle = `rgba(${C.scope},.12)`;
     ctx.beginPath();
     ctx.moveTo(c - R, c);
     ctx.lineTo(c + R, c);
     ctx.moveTo(c, c - R);
     ctx.lineTo(c, c + R);
     ctx.stroke();
-    ctx.strokeStyle = `rgba(${C.green},.06)`;
+    ctx.strokeStyle = `rgba(${C.scope},.06)`;
     ctx.beginPath();
     const d = R * Math.SQRT1_2;
     ctx.moveTo(c - d, c - d);
@@ -209,16 +212,16 @@ export class Radar {
     }
 
     // Bearings and ring labels.
-    ctx.font = '9px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace';
+    ctx.font = FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = `rgba(${C.bone},.45)`;
+    ctx.fillStyle = `rgba(${C.grey},.7)`;
     for (const deg of [0, 90, 180, 270]) {
       const p = polarToXY((deg * Math.PI) / 180, 1, c, c, R - 10);
       ctx.fillText(String(deg).padStart(3, "0"), p.x, p.y);
     }
     ctx.textAlign = "left";
-    ctx.fillStyle = `rgba(${C.green},.45)`;
+    ctx.fillStyle = `rgba(${C.scope},.45)`;
     for (const [r, label] of rings) {
       if (!label) continue;
       const p = polarToXY((Math.PI / 180) * 22, r, c, c, R);
@@ -233,9 +236,9 @@ export class Radar {
     const g = ctx as CanvasRenderingContext2D & { createConicGradient?: (a: number, x: number, y: number) => CanvasGradient };
     if (typeof g.createConicGradient === "function") {
       const grad = g.createConicGradient(start, c, c);
-      grad.addColorStop(0, `rgba(${C.green},0)`);
-      grad.addColorStop(TRAIL / (Math.PI * 2), `rgba(${C.green},.30)`);
-      grad.addColorStop(Math.min(1, TRAIL / (Math.PI * 2) + 0.0001), `rgba(${C.green},0)`);
+      grad.addColorStop(0, `rgba(${C.scope},0)`);
+      grad.addColorStop(TRAIL / (Math.PI * 2), `rgba(${C.scope},.18)`);
+      grad.addColorStop(Math.min(1, TRAIL / (Math.PI * 2) + 0.0001), `rgba(${C.scope},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.moveTo(c, c);
@@ -246,7 +249,7 @@ export class Radar {
       const steps = 24;
       for (let i = 0; i < steps; i++) {
         const a0 = start + (TRAIL * i) / steps;
-        ctx.fillStyle = `rgba(${C.green},${(0.3 * (i + 1)) / steps})`;
+        ctx.fillStyle = `rgba(${C.scope},${(0.18 * (i + 1)) / steps})`;
         ctx.beginPath();
         ctx.moveTo(c, c);
         ctx.arc(c, c, R, a0, a0 + TRAIL / steps + 0.01);
@@ -256,8 +259,8 @@ export class Radar {
     }
     const tip = polarToXY(sweep, 1, c, c, R);
     ctx.save();
-    ctx.strokeStyle = `rgba(${C.green},.9)`;
-    ctx.shadowColor = `rgba(${C.green},.8)`;
+    ctx.strokeStyle = `rgba(${C.scope},.9)`;
+    ctx.shadowColor = `rgba(${C.scope},.4)`;
     ctx.shadowBlur = 8;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -326,13 +329,13 @@ export class Radar {
       // Holding: pulsing caution ring. Delivered: expanding flash.
       if (b.phase === "holding" && !this.reduced) {
         const p = (since % 1400) / 1400;
-        ctx.strokeStyle = `rgba(${C.amber},${(1 - p) * 0.8 * fade})`;
+        ctx.strokeStyle = `rgba(${C.warn},${(1 - p) * 0.8 * fade})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(x, y, 5 + p * 10, 0, Math.PI * 2);
         ctx.stroke();
       } else if (b.phase === "holding") {
-        ctx.strokeStyle = `rgba(${C.amber},.6)`;
+        ctx.strokeStyle = `rgba(${C.warn},.6)`;
         ctx.beginPath();
         ctx.arc(x, y, 8, 0, Math.PI * 2);
         ctx.stroke();
@@ -341,7 +344,7 @@ export class Radar {
         for (const k of [0, 400]) {
           const p = Math.max(0, since - k) / 2000;
           if (p <= 0 || p >= 1) continue;
-          ctx.strokeStyle = `rgba(${C.green},${(1 - p) * 0.9})`;
+          ctx.strokeStyle = `rgba(${C.scope},${(1 - p) * 0.9})`;
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.arc(x, y, 4 + p * 26, 0, Math.PI * 2);
@@ -353,7 +356,7 @@ export class Radar {
         // Labels sit radially outward from the blip, so a cluster near the center fans out.
         const ox = Math.sin(b.angle);
         const oy = -Math.cos(b.angle);
-        ctx.font = '9px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace';
+        ctx.font = FONT;
         ctx.textAlign = ox >= 0 ? "left" : "right";
         ctx.textBaseline = "middle";
         ctx.fillStyle = `rgba(${C.bone},${Math.max(0.35, alpha) * 0.85 * fade})`;

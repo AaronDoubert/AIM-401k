@@ -15,16 +15,21 @@ cpSync(join(root, "static"), out, { recursive: true });
 // pdf.js runs in a worker loaded from the extension package.
 cpSync(join(root, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"), join(out, "pdf.worker.min.mjs"));
 
-// Fonts are bundled locally (no CDN): Archivo (variable, width axis) and JetBrains Mono, both OFL.
+// Fonts are bundled locally (no CDN): Geist and Geist Mono (variable weight), both OFL.
 const fonts = {
-  "@fontsource-variable/archivo": ["archivo-latin-wdth-normal.woff2", "archivo-latin-ext-wdth-normal.woff2"],
-  "@fontsource/jetbrains-mono": ["jetbrains-mono-latin-400-normal.woff2", "jetbrains-mono-latin-500-normal.woff2", "jetbrains-mono-latin-700-normal.woff2", "jetbrains-mono-latin-ext-400-normal.woff2"],
+  "@fontsource-variable/geist": ["geist-latin-wght-normal.woff2", "geist-latin-ext-wght-normal.woff2"],
+  "@fontsource-variable/geist-mono": ["geist-mono-latin-wght-normal.woff2", "geist-mono-latin-ext-wght-normal.woff2"],
 };
 mkdirSync(join(out, "fonts"), { recursive: true });
 for (const [pkg, files] of Object.entries(fonts)) {
   for (const f of files) cpSync(join(root, "node_modules", pkg, "files", f), join(out, "fonts", f));
   cpSync(join(root, "node_modules", pkg, "LICENSE"), join(out, "fonts", `LICENSE-${pkg.split("/")[1]}.txt`));
 }
+
+// Logo artwork comes straight from the brand kit in brand/ (the logo is never typed out).
+const brand = ["aim401k-wordmark-offwhite.svg", "aim401k-mark-offwhite-transparent.svg"];
+mkdirSync(join(out, "brand"), { recursive: true });
+for (const f of brand) cpSync(join(root, "brand", f), join(out, "brand", f));
 
 const common = {
   outdir: out,

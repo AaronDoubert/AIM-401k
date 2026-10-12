@@ -1,0 +1,8 @@
+// Brand artwork that has to ship inside scripts.
+//
+// The on-page overlay can't load files from the extension (nothing is web-accessible,
+// so pages can't probe for AIM-401k), so it inlines the mark instead. This is the
+// supplied artwork verbatim; test/brand.test.ts keeps it in sync with brand/.
+
+/** brand/aim401k-mark-offwhite-transparent.svg */
+export const MARK_OFFWHITE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><g transform="translate(239.06 276.32) scale(0.33873)"><mask id="mmo" maskUnits="userSpaceOnUse" x="-2000" y="-2000" width="4000" height="4000"><rect x="-2000" y="-2000" width="4000" height="4000" fill="#fff"/><path d="M-122.3 -122.3L-299.1 -299.1M-122.3 122.3L-299.1 299.1M122.3 122.3L299.1 299.1" stroke="#000" stroke-width="80" fill="none"/><path d="M-112.0 -112.0L0.0 0.0L400.0 -400.0" fill="none" stroke="#000" stroke-width="236" stroke-linejoin="miter" stroke-miterlimit="10"/></mask><g mask="url(#mmo)"><circle r="298.0" fill="none" stroke="#F1EDE4" stroke-width="190"/></g><path d="M-112.0 -112.0L0.0 0.0L400.0 -400.0" fill="none" stroke="#F1EDE4" stroke-width="156" stroke-linejoin="miter" stroke-miterlimit="10"/></g></svg>`;

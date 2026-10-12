@@ -1,4 +1,5 @@
 import { api } from "../shared/api";
+import { MARK_OFFWHITE_SVG } from "../shared/brand";
 import { copy, type CopyKey } from "../shared/copy";
 import type { OverlayState, ToBackground } from "../shared/messages";
 import type { Need } from "../shared/types";
@@ -6,7 +7,8 @@ import type { Need } from "../shared/types";
 // The floating "AIM-401k needs you" box shown on every tab. Lives in a closed
 // shadow root so page CSS can't break it and page scripts can't read it.
 // All page-derived text is set via textContent (never innerHTML).
-// Fonts: system stacks only (no web-accessible font files, so pages can't probe for the extension).
+// Fonts: Geist / Geist Mono when installed, else system stacks (no web-accessible font
+// files, so pages can't probe for the extension). The mark is inlined for the same reason.
 
 const send = (msg: ToBackground): Promise<unknown> => api.runtime.sendMessage(msg);
 
@@ -17,10 +19,10 @@ const CSS = `
 :host { all: initial; }
 * { box-sizing: border-box; }
 .wrap {
-  --bg: #0a0c0b; --panel: #111513; --well: #0d100e; --line: #1f2723; --line-2: #2e3833; --bracket: #56625b;
-  --fg: #e8e6e1; --fg-2: #bfc3be; --muted: #8a928d; --accent: #ff5f1f; --accent-hi: #ff7a43; --ok: #39ff6a; --warn: #ffb000; --danger: #ff3b30;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --bg: #0c0c0b; --panel: #131311; --well: #090908; --line: #262522; --line-2: #353330; --bracket: #5c5953;
+  --fg: #f1ede4; --fg-2: #cdc9c0; --muted: #a19d94; --accent: #f1ede4; --accent-hi: #ffffff; --ok: #86c095; --warn: #dcae5e; --danger: #ec5f48;
+  --sans: "Geist", "Geist Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Geist Mono", "Geist Mono Variable", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
   position: fixed; right: 16px; bottom: 16px; z-index: 2147483647;
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
   font: 13px/1.4 var(--sans); color: var(--fg); text-align: left;
@@ -37,19 +39,21 @@ const CSS = `
     linear-gradient(var(--bc), var(--bc)) right bottom / 10px 2px, linear-gradient(var(--bc), var(--bc)) right bottom / 2px 10px;
   background-repeat: no-repeat; }
 
-.pip { width: 7px; height: 7px; flex: none; background: var(--ok); display: inline-block; }
+.mark { width: 18px; height: 18px; flex: none; display: block; }
+.head .mark { width: 16px; height: 16px; }
+.pip { width: 6px; height: 6px; flex: none; background: var(--accent); display: inline-block; }
 .pip.blink { animation: blink 1s steps(2, jump-none) infinite; }
 @keyframes blink { 50% { opacity: .2; } }
 
 .pill { --bc: var(--bracket); position: relative; display: flex; align-items: center; gap: 9px; padding: 9px 13px; border: 1px solid var(--line-2); border-radius: 0;
-  cursor: pointer; background: var(--bg); color: var(--fg); font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  cursor: pointer; background: var(--bg); color: var(--fg); font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
   box-shadow: 0 10px 30px rgba(0,0,0,.45); }
 .pill:hover { border-color: var(--bracket); }
-.pill.alert { --bc: var(--danger); border-color: rgba(255,59,48,.6); color: var(--accent); background: #140b09; }
+.pill.alert { --bc: var(--danger); border-color: rgba(236,95,72,.6); color: var(--fg); background: #170e0c; }
 .pill.alert .pip { background: var(--danger); }
 .pill.paused .pip { background: var(--muted); }
 .pill.arrive { animation: arrive .5s ease-out 2; }
-@keyframes arrive { 50% { box-shadow: 0 0 0 4px rgba(255,59,48,.35), 0 10px 30px rgba(0,0,0,.45); } }
+@keyframes arrive { 50% { box-shadow: 0 0 0 4px rgba(236,95,72,.35), 0 10px 30px rgba(0,0,0,.45); } }
 
 .panel { --bc: var(--bracket); position: relative; width: 384px; max-width: calc(100vw - 32px); max-height: min(72vh, 580px); display: flex; flex-direction: column;
   background: var(--bg); border: 1px solid var(--line-2); box-shadow: 0 18px 50px rgba(0,0,0,.55); animation: open .16s ease-out; }
@@ -57,11 +61,10 @@ const CSS = `
 @keyframes open { from { opacity: 0; transform: translateY(6px); } }
 .head { display: flex; flex-direction: column; gap: 6px; padding: 9px 10px 9px 12px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
 .head > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
-.head b { display: flex; align-items: center; gap: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.panel.hot .head b { color: var(--accent); }
-.head .pip { background: var(--accent); }
-.panel:not(.hot) .head .pip { background: var(--ok); }
-.head small { display: block; color: var(--muted); font-size: 10px; letter-spacing: .1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head b { display: flex; align-items: center; gap: 9px; font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head .pip { background: var(--danger); }
+.panel:not(.hot) .head .pip { background: var(--accent); }
+.head small { display: block; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .head button.b { flex: none; }
 .chud .job { text-transform: uppercase; }
 .list { overflow: auto; overscroll-behavior: contain; }
@@ -70,8 +73,8 @@ const CSS = `
 .card { position: relative; padding: 11px 14px 12px 16px; border-bottom: 1px solid var(--line); }
 .card:last-child { border-bottom: 0; }
 .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--k, var(--danger)); }
-.job { font-size: 10px; color: var(--muted); letter-spacing: .1em; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kind { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 1px 5px; margin-right: 8px;
+.job { font-size: 10px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kind { display: inline-block; font-size: 9.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; padding: 1px 5px; margin-right: 8px;
   border: 1px solid currentColor; color: var(--k, var(--danger)); vertical-align: 1px; }
 .k-question { --k: var(--warn); }
 .k-consent, .k-signature { --k: var(--accent); }
@@ -81,39 +84,39 @@ const CSS = `
 .detail { font-size: 11px; color: var(--warn); margin: -4px 0 9px; }
 input[type=text], input[type=date], textarea, select { display: block; width: 100%; margin: 0; font: 13px/1.4 var(--sans); padding: 7px 9px; border: 1px solid var(--line-2); border-radius: 0;
   color: var(--fg); background: var(--well); color-scheme: dark; }
-input::placeholder, textarea::placeholder { color: #7d8681; opacity: 1; }
+input::placeholder, textarea::placeholder { color: #79766f; opacity: 1; }
 input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 textarea { min-height: 72px; resize: vertical; }
 input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; margin: 0; border: 1px solid var(--bracket); background: var(--well) no-repeat center / 9px 7px; cursor: pointer; flex: none; }
 input[type=checkbox]:checked { background-color: var(--accent); border-color: var(--accent);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l3 3 5-6' fill='none' stroke='%230a0c0b' stroke-width='2'/%3E%3C/svg%3E"); }
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l3 3 5-6' fill='none' stroke='%230c0c0b' stroke-width='2'/%3E%3C/svg%3E"); }
 .opts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
-button.b { position: relative; display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; line-height: 1.2;
+button.b { position: relative; display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; line-height: 1.2;
   padding: 7px 10px; min-height: 30px; border-radius: 0; border: 1px solid var(--line-2); background: var(--panel); color: var(--fg); cursor: pointer; overflow: hidden; }
-button.b:hover { border-color: var(--bracket); background: #171c19; }
-button.b.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
+button.b:hover { border-color: var(--bracket); background: #1b1a18; }
+button.b.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button.b.primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
 button.b.link { border-color: transparent; background: none; color: var(--muted); padding: 7px 5px; }
 button.b.link:hover { color: var(--fg); background: none; border-color: transparent; text-decoration: underline; text-underline-offset: 3px; }
 button.b.icon { padding: 5px 8px; min-height: 26px; font-size: 12px; }
 button.b:focus-visible, .pill:focus-visible, input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-label.rem { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+label.rem { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
 .opts label.rem { font: 13px/1.35 var(--sans); text-transform: none; letter-spacing: 0; color: var(--fg); gap: 8px; }
 
 /* hold-to-release */
-button.b.hold { justify-content: center; border-color: rgba(255,95,31,.55); color: var(--accent); user-select: none; -webkit-user-select: none; touch-action: none; }
-button.b.hold:hover { border-color: var(--accent); background: rgba(255,95,31,.08); }
+button.b.hold { justify-content: center; border-color: rgba(241,237,228,.45); color: var(--accent); user-select: none; -webkit-user-select: none; touch-action: none; }
+button.b.hold:hover { border-color: var(--accent); background: rgba(241,237,228,.07); }
 .hold svg { width: 15px; height: 15px; flex: none; transform: rotate(-90deg); }
 .hold circle { fill: none; stroke-width: 2.5; }
-.hold .track { stroke: rgba(255,95,31,.25); }
+.hold .track { stroke: rgba(241,237,228,.22); }
 .hold .prog { stroke: var(--accent); stroke-dasharray: 50.27; stroke-dashoffset: 50.27; }
 .hold .bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); }
-.hold.arming { background: rgba(255,95,31,.12); border-color: var(--accent); }
+.hold.arming { background: rgba(241,237,228,.1); border-color: var(--accent); }
 .hold.arming .prog { stroke-dashoffset: 0; transition: stroke-dashoffset var(--hold) linear; }
 .hold.arming .bar { width: 100%; transition: width var(--hold) linear; }
 .hold.fired { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-.hold.fired .track { stroke: rgba(10,12,11,.3); }
+.hold.fired .track { stroke: rgba(12,12,11,.3); }
 .hold.fired .prog { stroke: var(--bg); stroke-dashoffset: 0; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -132,6 +135,15 @@ function svg(tag: string, attrs: Record<string, string>): SVGElement {
   const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
   for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
   return e;
+}
+
+/** The brand mark, parsed from the supplied artwork (never redrawn). */
+function mark(): Element {
+  const doc = new DOMParser().parseFromString(MARK_OFFWHITE_SVG.replaceAll("mmo", "aim401k-mark-mask"), "image/svg+xml");
+  const m = document.importNode(doc.documentElement, true);
+  m.setAttribute("class", "mark");
+  m.setAttribute("aria-hidden", "true");
+  return m;
 }
 
 function button(text: string, onClick: () => void, cls = ""): HTMLButtonElement {
@@ -212,11 +224,13 @@ export class Overlay {
     const pill = el(
       "button",
       { className: `pill brk ${n ? "alert" : ""} ${s.paused ? "paused" : ""} ${this.arrived && !this.open ? "arrive" : ""}`, type: "button" },
+      mark(),
       el("span", { className: `pip ${n || s.running ? "blink" : ""}` }),
       text,
     );
     this.arrived = false;
     pill.setAttribute("aria-expanded", String(this.open));
+    pill.setAttribute("aria-label", `AIM-401k: ${text}`);
     pill.addEventListener("click", () => {
       this.open = !this.open;
       this.render();
@@ -236,7 +250,7 @@ export class Overlay {
     const head = el(
       "div",
       { className: "head" },
-      el("div", {}, el("b", {}, el("span", { className: `pip ${s.needs.length ? "blink" : ""}` }), s.needs.length ? this.c("theme.ov.head.needs") : this.c("theme.ov.head.idle")), min),
+      el("div", {}, el("b", {}, mark(), el("span", { className: `pip ${s.needs.length ? "blink" : ""}` }), s.needs.length ? this.c("theme.ov.head.needs") : this.c("theme.ov.head.idle")), min),
       el("div", {}, el("small", { textContent: sub }), button(s.paused ? this.c("theme.resume") : this.c("theme.pause"), () => void send({ type: "setPaused", paused: !s.paused }))),
     );
     const list = el("div", { className: "list" });

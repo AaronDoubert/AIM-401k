@@ -177,7 +177,9 @@ export function broadcast(): void {
     const state = overlayState(s);
     const n = s.needs.length;
     await api.action.setBadgeText({ text: n ? String(n) : state.running ? "…" : "" });
-    await api.action.setBadgeBackgroundColor({ color: n ? "#dc2626" : "#2563eb" });
+    // Brand colors: signal red when you're needed, off-white otherwise, near-black text on both.
+    await api.action.setBadgeBackgroundColor({ color: n ? "#ec5f48" : "#f1ede4" });
+    await api.action.setBadgeTextColor?.({ color: "#0c0c0b" });
     const tabs = await api.tabs.query({});
     for (const t of tabs) if (t.id != null && /^(https?|file):/.test(t.url ?? "")) void toTab(t.id, { type: "overlay", state }, 0);
   }, 120);
