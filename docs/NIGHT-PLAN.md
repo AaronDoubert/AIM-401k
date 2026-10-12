@@ -62,7 +62,7 @@ Only edit files you own. Shared files (`types.ts`, `messages.ts`, `manifest.json
 
 ## Definition of done (each workstream)
 
-- The following all pass from `apps/aim-401k`: `pnpm typecheck`, `pnpm test`, `pnpm build`, `node scripts/e2e.mjs`.
+- The following all pass from the repository root: `pnpm typecheck`, `pnpm test`, `pnpm build`, `node scripts/e2e.mjs`.
 - New pure logic has unit tests, and there is an e2e suite for the feature's main path.
 - No new runtime dependencies, except that the theme area may add OFL font packages for local font files.
 - Commit on your branch with a clear message. Do not push. Report what's done, what's not, and any shared-file edits.

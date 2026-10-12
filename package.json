@@ -1,17 +1,38 @@
 {
-  "name": "condenser",
-  "version": "0.0.1",
+  "name": "aim-401k",
+  "version": "0.3.0",
   "private": true,
+  "type": "module",
+  "description": "Firefox extension that semi-autonomously fills and tracks job applications, pinging you only when a human is needed.",
   "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "turbo run build",
-    "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
-    "dev": "pnpm --filter @condenser/web dev",
-    "preview": "pnpm --filter @condenser/web preview"
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "e2e": "node scripts/e2e.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "pdfjs-dist": "^5.7.284",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
-    "turbo": "^2.3.3"
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@types/firefox-webext-browser": "^143.0.1",
+    "esbuild": "^0.25.0",
+    "happy-dom": "^20.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

@@ -8,13 +8,12 @@
 ## Build and package
 
 ```bash
-cd apps/aim-401k
 pnpm build      # → dist/
 pnpm package    # build + zip → release/aim-401k-<version>.zip
 pnpm package --no-build   # zip the existing dist/
 ```
 
-`scripts/package.mjs` has no dependencies: it zips `dist/` with `node:zlib` and its own CRC-32. `manifest.json` sits at the root of the archive and every entry has a fixed timestamp, so the same `dist/` always gives the same zip. The zip works as a temporary add-on and as input to `web-ext sign`. Renaming it to `.xpi` is optional. `release/` is git-ignored by the repo root `.gitignore`.
+`scripts/package.mjs` has no dependencies: it zips `dist/` with `node:zlib` and its own CRC-32. `manifest.json` sits at the root of the archive and every entry has a fixed timestamp, so the same `dist/` always gives the same zip. The zip works as a temporary add-on and as input to `web-ext sign`. Renaming it to `.xpi` is optional. `release/` is git-ignored.
 
 ## Install for a session (temporary)
 
@@ -36,13 +35,12 @@ Unlisted add-ons are signed by Mozilla but not published on addons.mozilla.org (
 2. Sign:
 
    ```bash
-   cd apps/aim-401k
    pnpm build
    npx web-ext sign --channel=unlisted --source-dir dist \
      --api-key="$AMO_JWT_ISSUER" --api-secret="$AMO_JWT_SECRET"
    ```
 
-   The signed `.xpi` lands in `web-ext-artifacts/`. Automatic signing usually takes a few minutes. AMO may ask for source code because the bundle is built with esbuild. If it does, pass a zip of `apps/aim-401k` (without `node_modules`, `dist`, `release`) with `--upload-source-code <file>`.
+   The signed `.xpi` lands in `web-ext-artifacts/`. Automatic signing usually takes a few minutes. AMO may ask for source code because the bundle is built with esbuild. If it does, pass a zip of the repository (without `node_modules`, `dist`, `release`) with `--upload-source-code <file>`.
 3. Install it from `about:addons` → gear menu → **Install Add-on From File…**.
 
 The add-on ID is `aim-401k@slop.local` (`browser_specific_settings.gecko.id`). AMO ties an ID to the first account that signs it, so if signing fails with an "ID already in use" error, change the ID to something of your own (e.g. `aim-401k@yourname.example`). Bump `version` in both `package.json` and `static/manifest.json` for every new signed build, because AMO rejects a version it has already seen.
