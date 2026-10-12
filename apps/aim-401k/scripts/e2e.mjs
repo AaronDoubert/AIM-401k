@@ -180,8 +180,13 @@ try {
   check(s.needs.length === 2, `exactly 2 needs (got ${s.needs.map((n) => n.prompt).join(" | ")})`);
 
   // Overlay shows up on the unrelated tab.
-  await sleep(500);
-  check((await other.locator("#aim401k-root").count()) === 1, "overlay mounted on other tab");
+  // The overlay mounts on the next broadcast; poll rather than guess a delay (slow under load).
+  let mounted = 0;
+  for (let i = 0; i < 40 && !mounted; i++) {
+    mounted = await other.locator("#aim401k-root").count();
+    if (!mounted) await sleep(250);
+  }
+  check(mounted === 1, "overlay mounted on other tab");
   await other.screenshot({ path: join(shots, "overlay-needs.png") }).catch(() => {});
 
   // Answer from "the box".
