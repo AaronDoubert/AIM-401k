@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-chud="1">
+<head>
+  <meta charset="utf-8" />
+  <title>AIM-401k</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="popup">
+  <div class="hud">
+    <div class="head">
+      <div class="brand">
+        <div>
+          <h1><img class="wordmark" src="brand/aim401k-wordmark-offwhite.svg" alt="AIM-401k" width="123" height="20" /></h1>
+          <div class="micro" data-copy="theme.brand.line">OPERATION GAINFUL // Autonomous Employment Acquisition System</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusline"><span class="pip" id="pip"></span><span id="sub" aria-live="polite">—</span><span class="clock" id="clock"></span><button id="pause" data-copy="theme.pause">HOLD FIRE</button></div>
+
+    <div id="setup" class="need ok frame" role="button" tabindex="0" style="display:none">
+      <b data-copy="theme.popup.setup.title">LOADOUT INCOMPLETE</b>
+      <small data-copy="theme.popup.setup.body">Load your resume so units can fill forms.</small>
+    </div>
+
+    <div class="stats">
+      <div class="stat crit" id="st-needs"><b id="n-needs">00</b><span data-copy="theme.popup.stat.needs">OPR REQ</span></div>
+      <div class="stat" id="st-running"><b id="n-running">00</b><span data-copy="theme.popup.stat.running">ENGAGED</span></div>
+      <div class="stat" id="st-queued"><b id="n-queued">00</b><span data-copy="theme.popup.stat.queued">TARGETED</span></div>
+      <div class="stat good" id="st-applied"><b id="n-applied">00</b><span data-copy="theme.popup.stat.applied">DELIVERED</span></div>
+    </div>
+
+    <div class="section-label micro" id="holding-label" hidden></div>
+    <div id="needs"></div>
+
+    <button id="warroom" class="warroom-btn" type="button">
+      <span class="pip hot"></span>
+      <span><span class="t" data-copy="theme.warroom">WAR ROOM</span><span class="s" data-copy="theme.warroom.sub">Live ops: units, comms, ops log</span></span>
+      <span class="go" aria-hidden="true">→</span>
+    </button>
+
+    <div class="actions">
+      <button class="primary" id="fill" data-copy="theme.popup.fill">ENGAGE THIS TAB</button>
+      <button id="queue-tab" data-copy="theme.popup.queueTab">TARGET THIS TAB</button>
+      <button id="applied" data-copy="theme.popup.applied">CONFIRM DELIVERED</button>
+      <button id="tracker" data-copy="theme.tracker">THEATER</button>
+    </div>
+
+    <div class="arm">
+      <textarea id="urls" data-copy-ph="theme.popup.urls.ph" placeholder="Paste job URLs (one per line) to queue them" aria-label="Job URLs"></textarea>
+      <button id="add" data-copy="theme.popup.queueUrls">ARM TARGETS</button>
+    </div>
+  </div>
+  <div class="foot">
+    <button id="options" class="ghost" data-copy="theme.settings">LOADOUT</button>
+    <label class="switch"><input type="checkbox" id="ui-plain" /><span data-copy="theme.ui.plain">PLAIN MODE</span></label>
+    <label class="switch"><input type="checkbox" id="ui-sound" /><span data-copy="theme.ui.sound">SOUND</span></label>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

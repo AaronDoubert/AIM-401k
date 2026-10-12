@@ -1,7 +1,7 @@
 node_modules/
 dist/
-.turbo/
+release/
+e2e-shots/
+web-ext-artifacts/
 *.tsbuildinfo
 .DS_Store
-e2e-shots/
-release/
