@@ -65,7 +65,7 @@ export type ToBackground =
   | { type: "adoptTab"; tabId: number }
   | { type: "markApplied"; tabId: number }
   | { type: "setPaused"; paused: boolean }
-  | { type: "updateJob"; jobId: string; patch: Partial<Pick<Job, "status" | "notes" | "company" | "title" | "location">> }
+  | { type: "updateJob"; jobId: string; patch: Partial<Pick<Job, "status" | "notes" | "company" | "title" | "location" | "appliedAt">> }
   | { type: "deleteJobs"; jobIds: string[] }
   | { type: "importJobs"; jobs: Job[] }
   | { type: "kick" }

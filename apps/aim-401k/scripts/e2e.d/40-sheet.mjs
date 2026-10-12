@@ -30,15 +30,15 @@ export default async function (t) {
 
   try {
     // Core-flow jobs this suite touches: the submitted posting.html job (matched by
-    // URL; its company/title come from the thank-you page) and the in-flight Acme
-    // application (apply.html?again=1, matched by company + title).
+    // URL) and the Acme jobs (the core flow applies to "Acme Robotics / Senior
+    // Platform Engineer" twice; a name-only sheet row matches the most recent one).
     let s = await store();
     console.log("   core-flow jobs:", s.jobs.map((j) => `${j.company} / ${j.title} [${j.status}]`).join(" · "));
     const posted = s.jobs.find((j) => j.url === `${base}/posting.html`);
     check(posted?.status === "submitted", `core-flow submitted job present (${posted?.status})`);
     const acmeBefore = byName(s, ...ACME);
-    check(acmeBefore.length === 1, `one tracked "${ACME.join(" / ")}" job before import (${acmeBefore.length})`);
-    const acme = acmeBefore[0];
+    check(acmeBefore.length >= 1, `tracked "${ACME.join(" / ")}" jobs before import (${acmeBefore.length})`);
+    const acme = [...acmeBefore].sort((a, b) => b.createdAt - a.createdAt)[0];
     const before = s.jobs.length;
 
     // --- 1. Google Sheets CSV export: junk rows above the header, quotes, an existing job --
@@ -59,11 +59,12 @@ export default async function (t) {
     s = await importAndWait("CSV import", (s) => s.jobs.some((j) => j.company === "Stark Industries"));
     check(s.jobs.length === before + 4, `CSV: 4 jobs created (${s.jobs.length - before})`);
     const acme2 = byName(s, ...ACME);
-    check(acme2.length === 1 && acme2[0].id === acme?.id, "CSV: existing Acme job matched by company + title, not duplicated");
+    const acmeAfter = acme2.find((j) => j.id === acme?.id);
+    check(acme2.length === acmeBefore.length && !!acmeAfter, "CSV: existing Acme job matched by company + title, not duplicated");
     const inFlight = ["running", "needs_you", "ready_to_submit"].includes(acme?.status);
     check(
-      /expect a call, next week/.test(acme2[0]?.notes ?? "") && acme2[0]?.status === (inFlight ? acme.status : "interviewing"),
-      `CSV: Acme notes added; status ${inFlight ? "left alone mid-application" : "moved to interviewing"} (${acme?.status} -> ${acme2[0]?.status})`,
+      /expect a call, next week/.test(acmeAfter?.notes ?? "") && acmeAfter?.status === (inFlight ? acme.status : "interviewing"),
+      `CSV: Acme notes added; status ${inFlight ? "left alone mid-application" : "moved to interviewing"} (${acme?.status} -> ${acmeAfter?.status})`,
     );
     const stark = byCompany(s, "Stark Industries");
     check(stark.length === 1 && stark[0].status === "submitted" && localIso(stark[0].appliedAt) === "2026-09-28", `CSV: Stark applied 2026-09-28, once (${stark.length}, ${localIso(stark[0]?.appliedAt)})`);
@@ -107,7 +108,7 @@ export default async function (t) {
     check(byCompany(s, "Hooli")[0]?.status === "offer", "XLSX: offer");
     const mesa = byCompany(s, "Black Mesa")[0];
     check(mesa?.status === "interviewing" && localIso(mesa.appliedAt) === "2026-09-01", `XLSX: Excel serial date read by header (${localIso(mesa?.appliedAt)})`);
-    check(byName(s, ...ACME).length === 1, "XLSX: Acme row matched the tracked job (no duplicate)");
+    check(byName(s, ...ACME).length === acmeBefore.length, "XLSX: Acme row matched the tracked job (no duplicate)");
 
     // --- 4. Published-sheet link (served by the fixture server) -------------------------
     await open();

@@ -223,6 +223,7 @@ try {
   await msg({ type: "submitJob", jobId: job1.id });
   s = await waitFor("job 1 submitted", (s) => s.jobs[0].status === "submitted");
   check(!!s.jobs[0].appliedAt && s.needs.length === 0, "job 1 tracked as applied, no needs left");
+  check(s.jobs[0].title === "Senior Platform Engineer" && s.jobs[0].company === "Acme Robotics", `title/company survive the thank-you page (${s.jobs[0].company} / ${s.jobs[0].title})`);
 
   // --- Job 2: multi-step SPA, auto-advance + auto-submit ---------------------
   await ext.evaluate(async () => {

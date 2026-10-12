@@ -77,8 +77,10 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
         if (!job || job.tabId !== tabId) return s;
         job.lastProgressAt = Date.now();
         if (msg.meta) {
-          if (msg.meta.title && (!job.title || frameId === 0)) job.title = msg.meta.title;
-          if (msg.meta.company && (!job.company || frameId === 0)) job.company = msg.meta.company;
+          // A confirmation page's <h1> is "Thank you for applying!", not the job: only fill gaps then.
+          const authoritative = frameId === 0 && msg.state !== "submitted";
+          if (msg.meta.title && (!job.title || authoritative)) job.title = msg.meta.title;
+          if (msg.meta.company && (!job.company || authoritative)) job.company = msg.meta.company;
           if (msg.meta.location && !job.location) job.location = msg.meta.location;
           if (msg.meta.ats && msg.meta.ats !== "generic") job.ats = msg.meta.ats;
         }
