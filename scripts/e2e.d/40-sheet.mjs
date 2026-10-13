@@ -18,6 +18,8 @@ export default async function (t) {
   const ACME = ["Acme Robotics", "Senior Platform Engineer"];
 
   const open = async () => {
+    // Add targets is collapsed by default; Import sheet lives in the expanded panel.
+    if (!(await ext.locator("#import-sheet").isVisible())) await ext.click("#add-toggle");
     await ext.click("#import-sheet");
     await ext.waitForSelector("#sheet-import-file", { state: "attached" });
   };

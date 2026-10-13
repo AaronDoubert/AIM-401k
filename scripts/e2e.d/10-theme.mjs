@@ -23,11 +23,21 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
   await page.waitForSelector(`tr[data-job-id="${done.id}"]`);
   check((await label()) === "Applied", `plain mode: tracker status label "Applied" (got ${await label()})`);
   check((await page.locator("h1").innerText()).trim().toLowerCase() === "tracker", "plain mode: tracker title");
+  check(await page.locator(".shell-banner").first().isHidden(), "plain mode: no CUI banner on the tracker");
+  check(/^\d\d:\d\d$/.test((await page.locator("#clock").innerText()).trim()), `plain mode: tracker clock is local HH:MM (${await page.locator("#clock").innerText()})`);
+  check((await page.locator("#caution .c-name").innerText()).trim() === "Needs you", "plain mode: master caution says Needs you");
+  check(await page.locator("#table-view").isVisible() && (await page.locator("#view-table").getAttribute("aria-pressed")) === "true", "tracker opens on the table view");
+  check(await page.locator("#add").isHidden(), "add targets starts collapsed");
+  await page.screenshot({ path: join(shots, "theme-tracker-plain.png"), fullPage: true, timeout: 10000 }).catch(() => {});
 
   await setUi({ chud: true });
   await sleep(400); // storage.onChanged → re-render
   check((await label()) === "SPLASH", `chud mode: tracker status label "SPLASH" (got ${await label()})`);
   check((await page.evaluate(() => document.documentElement.dataset.chud)) === "1", "chud flag on <html>");
+  check((await page.locator(".shell-banner").first().isVisible()) && /CUI/.test(await page.locator(".shell-banner").first().innerText()), "chud mode: CUI banner on the tracker");
+  check(/^\d{6}Z[A-Z]{3}\d\d$/.test((await page.locator("#clock").innerText()).trim()), `chud mode: tracker clock is a DTG (${await page.locator("#clock").innerText()})`);
+  check((await page.locator("#clear-done").innerText()).trim() === "CLEAR FAULTS", "chud mode: CLEAR FAULTS");
+  await page.screenshot({ path: join(shots, "theme-tracker-table.png"), fullPage: true, timeout: 10000 }).catch(() => {});
   const ov = await msg({ type: "getOverlayState" });
   check(ov.chud === true, "overlay state carries chud flag");
 
@@ -42,6 +52,7 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
   const stageNames = await page.$$eval("#stats .stage dt", (els) => els.map((e) => e.textContent));
   const colNames = await page.$$eval("#board .bcol header .t", (els) => els.map((e) => e.textContent));
   check(stageNames.join() === colNames.join(), `totals and board use the same stage names (${stageNames.join(" · ")})`);
+  check((await page.locator(`#board .bcard[data-job-id="${done.id}"] .pill`).count()) === 0, "a card in SPLASH carries no SPLASH badge");
   check((await page.locator("#table-view").isHidden()) && (await page.locator("#import-sheet").count()) === 1 && (await page.locator("#intel-feed").count()) === 1, "board hides table; import + intel hooks kept");
   await page.bringToFront(); // a background tab never paints, so screenshots and drags would stall
   await page.screenshot({ path: join(shots, "theme-board.png"), fullPage: true, timeout: 10000 }).catch(() => {});

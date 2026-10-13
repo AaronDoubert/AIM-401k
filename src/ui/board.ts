@@ -1,5 +1,5 @@
 import type { CopyKey } from "../shared/copy";
-import type { Job, JobStatus } from "../shared/types";
+import type { Job, JobStatus, Need } from "../shared/types";
 import { type StageId, STAGES } from "./stages";
 
 // Tracker board view: pure grouping logic (unit-tested), no DOM.
@@ -50,4 +50,27 @@ export function dropStatus(job: Pick<Job, "status">, column: BoardColumn["id"]):
 export function callsigns(jobs: Pick<Job, "id" | "createdAt">[]): Map<string, number> {
   const sorted = [...jobs].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
   return new Map(sorted.map((j, i) => [j.id, i + 1]));
+}
+
+/** Statuses that earn a badge on a board card: a sub-state inside its column, or an exception. */
+const BADGED: JobStatus[] = ["queued", "ready_to_submit", "failed", "skipped"];
+
+/**
+ * Status badge for a board card, or null. The column already says Splash, Hold,
+ * Contact and so on, so repeating that is noise; only what the column doesn't
+ * say is shown: queued (planned), ready, and the exceptions (failed, skipped).
+ */
+export function cardBadge(status: JobStatus): JobStatus | null {
+  return BADGED.includes(status) ? status : null;
+}
+
+/**
+ * Jobs waiting on the user, oldest request first. `needIds` is what the master
+ * caution lamp watches; `jobIds[0]` is where pressing it should land. Needs for
+ * jobs that no longer exist are ignored.
+ */
+export function waitingJobs(needs: Pick<Need, "id" | "jobId" | "createdAt">[], jobs: Pick<Job, "id">[]): { needIds: string[]; jobIds: string[] } {
+  const known = new Set(jobs.map((j) => j.id));
+  const live = needs.filter((n) => known.has(n.jobId)).sort((a, b) => a.createdAt - b.createdAt);
+  return { needIds: live.map((n) => n.id), jobIds: [...new Set(live.map((n) => n.jobId))] };
 }
