@@ -1,11 +1,11 @@
 // Copy for the intel area. Keys must be prefixed "intel." and exist in both maps.
 export const CHUD = {
-  "intel.kind.received": "ACK",
+  "intel.kind.received": "RECEIVED",
   "intel.kind.interview": "CONTACT",
-  "intel.kind.assessment": "TRIAL",
+  "intel.kind.assessment": "ASSESSMENT",
   "intel.kind.offer": "SECURED",
   "intel.kind.rejection": "LOST",
-  "intel.kind.other": "NOISE",
+  "intel.kind.other": "OTHER",
 
   "intel.ops": 'INTEL · {company} · "{subject}" → {kind}',
   "intel.ops.unmatched": 'INTEL · {company} · "{subject}" → {kind} · NO TGT',
@@ -13,9 +13,9 @@ export const CHUD = {
   "intel.ops.gmail.lost": "INTEL · GMAIL LINK LOST. Reconnect in Settings",
   "intel.notify.gmail.lost": "GMAIL LINK LOST",
 
-  "intel.feed.title": "SIGINT",
-  "intel.feed.count": "{n} intercepts · {u} unassigned",
-  "intel.feed.empty": "No intel yet. Open Gmail or Outlook in a tab and the inbox list is read here, locally.",
+  "intel.feed.title": "INBOX",
+  "intel.feed.count": "{n} emails · {u} unassigned",
+  "intel.feed.empty": "Nothing from your inbox yet. Open Gmail or Outlook in a tab and the message list is read here, on this device.",
   "intel.feed.off": "Inbox intel is off. Settings → Inbox intel.",
   "intel.feed.assign": "Assign to…",
   "intel.feed.change": "Reassign",
@@ -42,7 +42,7 @@ export const PLAIN: Record<keyof typeof CHUD, string> = {
 
   "intel.feed.title": "From your inbox",
   "intel.feed.count": "{n} emails · {u} not matched",
-  "intel.feed.empty": "No inbox updates yet. Keep Gmail or Outlook open in a tab and AIM-401k reads the message list locally to update statuses.",
+  "intel.feed.empty": "Nothing from your inbox yet. Open Gmail or Outlook in a tab and the message list is read here, on this device.",
   "intel.feed.off": "Inbox updates are off. Turn them on in Settings → Inbox intel.",
   "intel.feed.assign": "Assign to job…",
   "intel.feed.change": "Change",

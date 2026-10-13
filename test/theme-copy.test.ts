@@ -57,6 +57,32 @@ describe("copy coverage", () => {
   });
 });
 
+describe("tracker vocabulary", () => {
+  it("uses the same words as the War Room", () => {
+    for (const mode of [true, false]) {
+      expect(copy(mode, "theme.tracker.queue"), `queue ${mode}`).toBe(copy(mode, "warroom.arm.go"));
+    }
+    expect(copy(true, "theme.tracker.clear")).toBe("CLEAR FAULTS");
+    expect(copy(false, "theme.tracker.clear")).toBe("Remove failed");
+    expect(copy(false, "theme.tracker.queue")).toBe("Queue");
+  });
+
+  it("keeps plain sentences plain in both modes", () => {
+    for (const mode of [true, false]) {
+      expect(copy(mode, "intel.feed.empty"), `feed empty ${mode}`).toMatch(/^Nothing from your inbox yet\./);
+      expect(copy(mode, "intel.feed.empty")).not.toMatch(/intel/i);
+    }
+  });
+
+  it("drops the puns the tracker used to carry", () => {
+    const text = Object.entries(COPY_MAPS.chud)
+      .filter(([k]) => /^(theme\.(tracker|col|act|view|filter)|intel\.(feed|kind))/.test(k))
+      .map(([, v]) => v)
+      .join(" | ");
+    expect(text).not.toMatch(/SIGINT|intercept|NOISE|TRIAL|ACK\b|KILL|ENGAGE ALL/);
+  });
+});
+
 describe("copy()", () => {
   it("switches on settings.ui.chud and interpolates", () => {
     expect(copy({ ui: { chud: true } }, "status.submitted")).toBe("SPLASH");

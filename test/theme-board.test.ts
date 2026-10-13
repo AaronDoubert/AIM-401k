@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD_COLUMNS, callsigns, columnFor, dropStatus, groupForBoard } from "../src/ui/board";
+import { BOARD_COLUMNS, callsigns, cardBadge, columnFor, dropStatus, groupForBoard, waitingJobs } from "../src/ui/board";
 import type { Job, JobStatus } from "../src/shared/types";
 
 const ALL: JobStatus[] = ["saved", "queued", "running", "needs_you", "ready_to_submit", "submitted", "failed", "skipped", "interviewing", "offer", "rejected"];
@@ -55,5 +55,25 @@ describe("board columns", () => {
   it("numbers call signs by creation time", () => {
     const m = callsigns([job("z", "saved", 30), job("y", "saved", 10), job("x", "saved", 20)]);
     expect([m.get("y"), m.get("x"), m.get("z")]).toEqual([1, 2, 3]);
+  });
+});
+
+describe("board card badges", () => {
+  it("shows a badge only for sub-states and exceptions, never the column name", () => {
+    expect(ALL.filter((s) => cardBadge(s)).sort()).toEqual(["failed", "queued", "ready_to_submit", "skipped"]);
+    for (const s of ["saved", "running", "needs_you", "submitted", "interviewing", "offer", "rejected"] as JobStatus[]) expect(cardBadge(s), s).toBeNull();
+  });
+});
+
+describe("waiting on you", () => {
+  const need = (id: string, jobId: string, createdAt: number) => ({ id, jobId, createdAt });
+  it("lists the oldest request first, one job once, and ignores deleted jobs", () => {
+    const jobs = [{ id: "a" }, { id: "b" }];
+    const w = waitingJobs([need("n3", "b", 30), need("n1", "a", 10), need("n2", "a", 20), need("n0", "gone", 5)], jobs);
+    expect(w.needIds).toEqual(["n1", "n2", "n3"]);
+    expect(w.jobIds).toEqual(["a", "b"]);
+  });
+  it("is empty when nothing waits", () => {
+    expect(waitingJobs([], [{ id: "a" }])).toEqual({ needIds: [], jobIds: [] });
   });
 });
