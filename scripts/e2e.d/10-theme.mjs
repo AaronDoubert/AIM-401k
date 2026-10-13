@@ -26,7 +26,7 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
 
   await setUi({ chud: true });
   await sleep(400); // storage.onChanged → re-render
-  check((await label()) === "DELIVERED", `chud mode: tracker status label "DELIVERED" (got ${await label()})`);
+  check((await label()) === "SPLASH", `chud mode: tracker status label "SPLASH" (got ${await label()})`);
   check((await page.evaluate(() => document.documentElement.dataset.chud)) === "1", "chud flag on <html>");
   const ov = await msg({ type: "getOverlayState" });
   check(ov.chud === true, "overlay state carries chud flag");
@@ -35,21 +35,27 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
   await page.click("#view-board");
   await page.waitForSelector("#board .bcol");
   const cols = await page.$$eval("#board .bcol", (els) => els.map((e) => e.getAttribute("data-col")));
-  check(cols.join(",") === "targeted,engaged,holding,delivered,contact,secured,lost", `board columns (${cols.join(",")})`);
-  check((await page.locator(`#board .bcol[data-col="delivered"] .bcard[data-job-id="${done.id}"]`).count()) === 1, "submitted job sits in DELIVERED");
-  check(await page.locator(`#board .bcol[data-col="lost"]`).evaluate((e) => e.classList.contains("collapsed")), "LOST column starts collapsed");
+  check(cols.join(",") === "targets,engaged,hold,splash,contact,secured,lost", `board columns (${cols.join(",")})`);
+  check((await page.locator(`#board .bcol[data-col="splash"] .bcard[data-job-id="${done.id}"]`).count()) === 1, "submitted job sits in SPLASH");
+  check(await page.locator(`#board .bcol[data-col="lost"]`).evaluate((e) => e.classList.contains("rail")), "LOST column starts as a rail");
+  check(await page.locator(`#board .bcol[data-col="secured"]`).evaluate((e) => e.classList.contains("rail")), "empty column collapses to a rail");
+  const stageNames = await page.$$eval("#stats .stage dt", (els) => els.map((e) => e.textContent));
+  const colNames = await page.$$eval("#board .bcol header .t", (els) => els.map((e) => e.textContent));
+  check(stageNames.join() === colNames.join(), `totals and board use the same stage names (${stageNames.join(" · ")})`);
   check((await page.locator("#table-view").isHidden()) && (await page.locator("#import-sheet").count()) === 1 && (await page.locator("#intel-feed").count()) === 1, "board hides table; import + intel hooks kept");
-  await page.screenshot({ path: join(shots, "theme-board.png"), fullPage: true }).catch(() => {});
+  await page.bringToFront(); // a background tab never paints, so screenshots and drags would stall
+  await page.screenshot({ path: join(shots, "theme-board.png"), fullPage: true, timeout: 10000 }).catch(() => {});
 
   // Drag a delivered card to CONTACT → updateJob(status: interviewing).
   // (Stepped mouse moves: Chromium needs intermediate moves to start an HTML5 drag.)
   await page.locator(`.bcard[data-job-id="${done.id}"]`).scrollIntoViewIfNeeded();
   const from = await page.locator(`.bcard[data-job-id="${done.id}"] .top`).boundingBox();
-  const to = await page.locator(`.bcol[data-col="contact"] .cards`).boundingBox();
   await page.mouse.move(from.x + 5, from.y + 5);
   await page.mouse.down();
   await page.mouse.move(from.x + 30, from.y + 30, { steps: 5 });
-  await page.mouse.move(to.x + to.width / 2, to.y + 40, { steps: 10 });
+  // Rails widen into drop targets once a drag starts: measure the target after that.
+  const to = await page.locator(`.bcol[data-col="contact"]`).boundingBox({ timeout: 3000 });
+  await page.mouse.move(to.x + to.width / 2, to.y + 60, { steps: 10 });
   await page.mouse.up();
   let moved = false;
   for (let i = 0; i < 20 && !moved; i++) {
@@ -57,6 +63,12 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
     moved = (await store()).jobs.find((j) => j.id === done.id)?.status === "interviewing";
   }
   check(moved, "drag to CONTACT sets status interviewing");
+  const pop0 = await ctx.newPage();
+  await pop0.goto(`chrome-extension://${extId}/popup.html`);
+  await sleep(500);
+  const popNames = await pop0.$$eval("#stages .stage dt", (els) => els.map((e) => e.textContent));
+  check(popNames.join() === stageNames.slice(0, 4).join(), `popup shows the first four stages in the same order (${popNames.join(" · ")})`);
+  await pop0.close();
   await msg({ type: "updateJob", jobId: done.id, patch: { status: "submitted" } }); // put it back for later suites
   await page.click("#view-table");
   await page.close();

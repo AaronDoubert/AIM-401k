@@ -28,10 +28,11 @@ Everything here is final artwork. Use these files as they are; don't redraw, rec
 
 **Type.**
 
-- Headlines and body text are **Geist**.
-- Labels, stats and captions are **Geist Mono**, in caps, with wide letter spacing (about 0.14em; 0.22em for taglines).
+- Human content (company, role, questions, body text) is **Geist**, in sentence case.
+- Headers, section labels and buttons are **Barlow Condensed**, the DIN-style face real military and aviation signage uses.
+- Machine data only (IDs, timestamps, status codes, counts) is **Geist Mono**, in caps. Numbers are always tabular.
 
-Both are free under the SIL Open Font License, including for commercial use and on the web. Get them from [Google Fonts](https://fonts.google.com/specimen/Geist) or [Vercel](https://vercel.com/font). The extension bundles them from the `@fontsource-variable/geist` and `@fontsource-variable/geist-mono` packages, so nothing loads from a CDN.
+All three are free under the SIL Open Font License, including for commercial use and on the web. The extension bundles them from the `@fontsource-variable/geist`, `@fontsource-variable/geist-mono` and `@fontsource/barlow-condensed` packages, so nothing loads from a CDN.
 
 **Color.**
 
@@ -41,7 +42,7 @@ Both are free under the SIL Open Font License, including for commercial use and 
 | Off-white | `#F1EDE4` | Text, logo, primary buttons |
 | Grey | `#A19D94` | Secondary text |
 
-The extension also uses three muted signal colors, only to show status and never as decoration: green `#86C095` (done), amber `#DCAE5E` (waiting on you) and red `#EC5F48` (needs you now, errors).
+The extension also uses muted signal colors, only to show status and never as decoration. They follow cockpit color doctrine (MIL-STD-411): red `#EC5F48` is a warning (a real failure), amber `#DCAE5E` is a caution (waiting on you), green `#86C095` is normal, cyan `#6FB3C4` is advisory, and off-white is plain status. The War Room's classification banner is the CUI purple `#502B85`.
 
 ## In the code
 

@@ -1,169 +1,177 @@
-// Unit tiles: one per active job. DOM is built once per tile and patched on
-// update, so typing into an answer box survives live refreshes. All job and
-// page derived text goes through textContent (never innerHTML).
+// Track rows: one per job in flight, in a table like a C2 track list. DOM is
+// built once per row and patched on update, so typing into an answer box
+// survives live refreshes. All job and page derived text goes through
+// textContent (never innerHTML).
 import type { CopyKey } from "../../shared/copy";
+import { callsign, companyName } from "../../shared/display";
 import type { ToBackground } from "../../shared/messages";
-import type { Need } from "../../shared/types";
+import type { FieldCheck, Need } from "../../shared/types";
 import { h } from "../common";
-import { holdToFire } from "./holdfire";
-import { progressOf, schematicRows, stopwatch, type TileModel } from "./model";
+import { guardedRelease } from "../guarded";
+import { progressOf, stopwatch, type TileModel } from "./model";
 
 export type T = (key: CopyKey, vars?: Record<string, string | number>) => string;
 
-export interface TileDeps {
+export interface TrackDeps {
   t: () => T;
   send: (msg: ToBackground) => Promise<unknown>;
   /** Unsent answer text per need id, kept across re-renders. */
   drafts: Map<string, string>;
+  /** Row clicked: lock onto this unit. */
+  select: (jobId: string) => void;
 }
 
-const ROWS = 6;
+const MARK: Record<FieldCheck["state"], string> = { ok: "✓", ai: "◆", need: "⚠", todo: "·" };
 
-export class TileView {
+export class TrackView {
   readonly el: HTMLElement;
-  private readonly hit: HTMLElement;
-  private readonly unitId: HTMLElement;
-  private readonly meta: HTMLElement;
-  private readonly phaseEl: HTMLElement;
+  private readonly row: HTMLElement;
+  private readonly unit: HTMLElement;
+  private readonly tgt: HTMLElement;
   private readonly company: HTMLElement;
-  private readonly title: HTMLElement;
-  private readonly viz: HTMLElement;
-  private readonly rows: HTMLElement[] = [];
-  private readonly lockLabel: HTMLElement;
-  private readonly lockField: HTMLElement;
-  private readonly lock: HTMLElement;
-  private readonly meterFill: HTMLElement;
-  private readonly stats: HTMLElement;
-  private readonly stepEl: HTMLElement;
-  private readonly stamp: HTMLElement;
+  private readonly role: HTMLElement;
+  private readonly status: HTMLElement;
+  private readonly bar: HTMLElement;
+  private readonly fieldsText: HTMLElement;
+  private readonly hold: HTMLElement;
+  private readonly open: HTMLButtonElement;
+  private readonly detail: HTMLElement;
+  private readonly checklist: HTMLElement;
+  private readonly now: HTMLElement;
   private readonly operator: HTMLElement;
   private readonly opTimer: HTMLElement;
   private thumb: HTMLImageElement | null = null;
   private needSig = "";
-  private lastLock = "";
+  private checkSig = "";
 
   constructor(
     readonly jobId: string,
-    private readonly deps: TileDeps,
+    private readonly deps: TrackDeps,
   ) {
-    this.unitId = h("span", { className: "unit-id" });
-    this.meta = h("span", { className: "tile-meta" });
-    this.phaseEl = h("span", { className: "tile-phase" });
-    this.company = h("div", { className: "tile-company" });
-    this.title = h("div", { className: "tile-title" });
-    const schematic = h("div", { className: "schematic", ariaHidden: "true" });
-    for (let i = 0; i < ROWS; i++) {
-      const row = h("div", { className: "srow", style: `--i:${i}` }, h("i", { className: "lab" }), h("i", { className: "inp" }, h("b", { className: "fill" })));
-      this.rows.push(row);
-      schematic.append(row);
-    }
-    this.stamp = h("div", { className: "stamp", ariaHidden: "true" });
-    this.viz = h("div", { className: "viz" }, schematic, h("i", { className: "brk tl" }), h("i", { className: "brk tr" }), h("i", { className: "brk bl" }), h("i", { className: "brk br" }), this.stamp);
-    this.lockLabel = h("span", { className: "lock-label" });
-    this.lockField = h("span", { className: "lock-field" });
-    this.lock = h("div", { className: "lock" }, this.lockLabel, h("span", { className: "reticle", ariaHidden: "true", textContent: "⌖" }), this.lockField);
-    this.meterFill = h("i");
-    this.stats = h("span", { className: "tile-fields" });
-    this.stepEl = h("span", { className: "tile-step" });
+    this.unit = h("span", { className: "c-unit" });
+    this.tgt = h("span", { className: "c-tgt" });
+    this.company = h("span", { className: "c-co" });
+    this.role = h("span", { className: "c-role" });
+    this.status = h("span", { className: "c-status" });
+    this.bar = h("b", { className: "fill" });
+    this.fieldsText = h("span", { className: "c-fields-n" });
+    this.hold = h("span", { className: "c-hold" });
+    this.open = h("button", { type: "button", className: "wr-btn ghost c-open" });
+    this.open.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void this.deps.send({ type: "focusJob", jobId: this.jobId });
+    });
 
-    this.hit = h(
+    this.row = h(
       "div",
-      { className: "tile-hit", tabIndex: 0 },
-      h("div", { className: "tile-top" }, this.unitId, this.meta, h("span", { className: "tile-pip", ariaHidden: "true" }), this.phaseEl),
-      this.company,
-      this.title,
-      this.viz,
-      this.lock,
-      h("div", { className: "meter" }, this.meterFill),
-      h("div", { className: "tile-foot" }, this.stats, this.stepEl),
+      { className: "track-row", tabIndex: 0 },
+      this.unit,
+      this.tgt,
+      h("span", { className: "c-job" }, this.company, this.role),
+      this.status,
+      h("span", { className: "c-fields" }, h("i", { className: "bar" }, this.bar), this.fieldsText),
+      this.hold,
+      this.open,
     );
-    this.hit.setAttribute("role", "button");
-    const focus = () => void this.deps.send({ type: "focusJob", jobId: this.jobId });
-    this.hit.addEventListener("click", focus);
-    this.hit.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
+    const select = () => this.deps.select(this.jobId);
+    this.row.addEventListener("click", select);
+    this.row.addEventListener("dblclick", () => void this.deps.send({ type: "focusJob", jobId: this.jobId }));
+    this.row.addEventListener("keydown", (e) => {
+      if (e.target !== this.row) return;
+      if (e.key === "Enter") void this.deps.send({ type: "focusJob", jobId: this.jobId });
+      else if (e.key === " ") {
         e.preventDefault();
-        focus();
+        select();
       }
     });
 
+    this.checklist = h("ul", { className: "checklist" });
+    this.now = h("div", { className: "c-now" });
+    this.detail = h("div", { className: "track-detail" }, this.now, this.checklist);
     this.opTimer = h("span", { className: "op-timer" });
     this.operator = h("section", { className: "operator" });
     this.operator.hidden = true;
-    this.el = h("article", { className: "tile frame" }, this.hit, this.operator);
+    this.el = h("article", { className: "track" }, this.row, this.detail, this.operator);
     this.el.dataset.job = jobId;
   }
 
-  update(m: TileModel, slot: number, now: number, chud: boolean): void {
+  update(m: TileModel, slot: number, tgt: string, now: number, chud: boolean, selected: boolean): void {
     const t = this.deps.t();
-    const unit = String(slot).padStart(2, "0");
-    const phaseKey = (m.ready ? "warroom.phase.ready" : `warroom.phase.${m.phase}`) as CopyKey;
-    const name = m.company || hostOf(m.url) || t("warroom.tile.untitled");
+    const name = companyName(m) || t("warroom.tile.untitled");
+    const finished = m.phase === "delivered" || m.phase === "lost";
 
     const ds = this.el.dataset;
     ds.phase = m.phase;
+    ds.status = m.status;
     ds.ready = String(m.ready);
     ds.done = String(m.fieldsDone);
     ds.total = String(m.fieldsTotal);
     ds.step = String(m.step);
-    ds.slot = unit;
+    ds.slot = String(slot);
+    this.el.classList.toggle("locked", selected);
+    this.row.setAttribute("aria-selected", String(selected));
 
-    setText(this.unitId, chud ? `UNIT-${unit}` : `#${slot}`);
-    setText(this.meta, chud ? `TGT-${m.tgt}` : "");
-    setText(this.phaseEl, t(phaseKey));
+    setText(this.unit, chud ? callsign(slot) : `#${slot}`);
+    setText(this.tgt, tgt);
     setText(this.company, name);
-    setText(this.title, m.title || pathOf(m.url));
-    this.hit.setAttribute("aria-label", t("warroom.tile.open", { job: [name, m.title].filter(Boolean).join(" · ") }));
+    setText(this.role, m.title || pathOf(m.url));
+    setText(this.status, t((m.ready ? "warroom.phase.ready" : `warroom.phase.${m.phase}`) as CopyKey));
+    setText(this.open, t("warroom.tile.open"));
+    this.open.setAttribute("aria-label", t("warroom.tile.open_label", { job: [name, m.title].filter(Boolean).join(" — ") }));
 
-    // Schematic + progress.
-    const { filled, active } = schematicRows(m, ROWS);
-    this.rows.forEach((r, i) => {
-      r.classList.toggle("on", i < filled);
-      r.classList.toggle("active", i === active);
-    });
-    const p = progressOf(m);
-    this.meterFill.style.width = `${(p * 100).toFixed(1)}%`;
-    setText(this.stats, m.fieldsTotal ? t("warroom.tile.fields", { done: m.fieldsDone, total: m.fieldsTotal }) : "—");
-    setText(this.stepEl, t("warroom.tile.step", { step: m.step }));
-    setText(this.stamp, m.phase === "delivered" || m.phase === "lost" ? t(`warroom.phase.${m.phase}`) : "");
+    this.bar.style.width = `${(progressOf(m) * 100).toFixed(1)}%`;
+    const fields = m.fieldsTotal ? t("warroom.tile.fields", { done: m.fieldsDone, total: m.fieldsTotal }) : "—";
+    setText(this.fieldsText, m.step > 1 ? `${fields} · ${t("warroom.tile.step", { step: m.step })}` : fields);
+    setText(this.hold, m.holdingSince != null ? stopwatch(now - m.holdingSince) : "");
 
-    // Lock-on line.
-    const field = lockText(m, t);
-    setText(this.lockLabel, m.phase === "filling" && m.currentField ? t("warroom.tile.lock") : "");
-    if (field !== this.lastLock) {
-      this.lastLock = field;
-      this.lockField.textContent = field;
-      this.lock.classList.remove("acq");
-      void this.lock.offsetWidth; // restart the lock-on animation
-      this.lock.classList.add("acq");
+    // What the unit is doing right now, then the field checklist.
+    setText(this.now, finished ? "" : nowText(m, t));
+    const sig = `${chud}|${m.fields.map((f) => `${f.state}:${f.label}`).join("|")}`;
+    if (sig !== this.checkSig) {
+      this.checkSig = sig;
+      this.checklist.replaceChildren(
+        ...m.fields.map((f) => {
+          const li = h("li", { title: f.state === "ai" ? t("warroom.check.ai") : f.state === "need" ? t("warroom.check.need") : "" }, h("span", { textContent: f.label }), h("i", { textContent: MARK[f.state], ariaHidden: "true" }));
+          li.dataset.state = f.state;
+          if (f.state === "ai") li.append(h("em", { textContent: t("warroom.check.ai") }));
+          return li;
+        }),
+      );
     }
+    this.detail.hidden = finished || (!m.fields.length && !this.now.textContent && !(selected && m.thumb));
 
-    // Thumbnail (Firefox only) behind the schematic.
-    if (m.thumb) {
+    // A live capture of the tab (Firefox), only for the locked unit.
+    if (selected && m.thumb) {
       if (!this.thumb) {
         this.thumb = h("img", { className: "thumb", alt: "" });
-        this.viz.prepend(this.thumb);
+        this.detail.prepend(this.thumb);
       }
       if (this.thumb.src !== m.thumb) this.thumb.src = m.thumb;
-      this.viz.classList.add("has-thumb");
+    } else if (this.thumb) {
+      this.thumb.remove();
+      this.thumb = null;
     }
 
     // Operator panel: rebuilt only when the set of needs (or the copy mode) changes.
-    const sig = `${chud}|${m.needs.map((n) => n.id).join(",")}`;
-    if (sig !== this.needSig) {
-      this.needSig = sig;
+    const needSig = `${chud}|${m.needs.map((n) => n.id).join(",")}`;
+    if (needSig !== this.needSig) {
+      this.needSig = needSig;
       this.renderOperator(m, t);
     }
     if (m.holdingSince != null) setText(this.opTimer, t("warroom.op.holding", { t: stopwatch(now - m.holdingSince) }));
+  }
+
+  /** Put the keyboard on this unit's first answer box (master caution jump). */
+  focusOperator(): void {
+    const target = this.operator.querySelector<HTMLElement>("textarea, input.wr-input, select, .guard-cover:not(:disabled), button.primary");
+    (target ?? this.row).focus({ preventScroll: true });
   }
 
   private renderOperator(m: TileModel, t: T): void {
     this.operator.replaceChildren();
     this.operator.hidden = !m.needs.length;
     if (!m.needs.length) return;
-    this.operator.append(
-      h("div", { className: "op-head" }, h("span", { className: "op-title", textContent: t(m.ready ? "warroom.op.ready" : "warroom.op.title") }), this.opTimer),
-    );
+    this.operator.append(h("div", { className: "op-head" }, h("span", { className: "op-title", textContent: t(m.ready ? "warroom.op.ready" : "warroom.op.title") }), this.opTimer));
     // Questions first, the release last.
     const order = [...m.needs].sort((a, b) => Number(a.kind === "review_submit") - Number(b.kind === "review_submit"));
     for (const n of order) this.operator.append(this.needCard(n, t));
@@ -248,11 +256,8 @@ export class TileView {
       row.append(btn(t("warroom.need.agree"), () => answer("checked", always.box.checked), "primary"), always.el, btn(t("warroom.need.open"), go, "ghost"));
     } else if (need.kind === "review_submit") {
       row.append(
-        holdToFire({
-          label: t("warroom.fire.label"),
-          arming: t("warroom.fire.arming"),
-          done: t("warroom.fire.done"),
-          hint: t("warroom.fire.hint"),
+        guardedRelease({
+          labels: { guard: t("warroom.guard.lift"), hold: t("warroom.fire.label"), arming: t("warroom.fire.arming"), done: t("warroom.fire.done"), hint: t("warroom.fire.hint") },
           onFire: () => {
             sent();
             void send({ type: "submitJob", jobId: need.jobId });
@@ -275,14 +280,6 @@ function setText(el: HTMLElement, text: string): void {
   if (el.textContent !== text) el.textContent = text;
 }
 
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-}
-
 /** "https://acme.com/jobs/42?x=1" → "/jobs/42" (title stand-in before the page reports one). */
 function pathOf(url: string): string {
   try {
@@ -293,22 +290,14 @@ function pathOf(url: string): string {
   }
 }
 
-function lockText(m: TileModel, t: T): string {
+function nowText(m: TileModel, t: T): string {
   switch (m.phase) {
     case "filling":
-      return m.currentField || t("warroom.tile.acquiring");
-    case "holding": {
-      if (m.ready) return t("warroom.phase.ready");
-      const q = m.needs.find((n) => n.kind !== "review_submit");
-      return q?.prompt ?? t("warroom.phase.holding");
-    }
-    case "advancing":
-      return `${t("warroom.tile.step", { step: m.step })} ▸`;
+      return m.currentField ? t("warroom.tile.filling", { field: m.currentField }) : "";
     case "opening":
     case "recon":
-    case "queued":
       return t("warroom.tile.acquiring");
     default:
-      return t(`warroom.phase.${m.phase}`);
+      return "";
   }
 }

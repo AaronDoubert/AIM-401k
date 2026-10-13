@@ -1,32 +1,23 @@
-// War Room: full-screen ops dashboard (radar, unit tiles, ops log, operator panel).
+// War Room: full-screen live picture. A track table (one row per job in flight),
+// the shared stage totals, a master caution light that cycles through the units
+// waiting on you, the ops log, and an optional map layer.
 // Data: jobs/needs/settings from storage.local (+ onChanged), live unit state
 // and ops events from background broadcasts (+ getUnits/getOps on load).
 import { extractUrls } from "../core/csv";
 import { api } from "../shared/api";
 import { copy, type CopyKey } from "../shared/copy";
 import { normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
+import { companyName, dtg } from "../shared/display";
 import type { ToPages } from "../shared/messages";
 import type { Job, Need, OpsEvent, Settings, UnitState } from "../shared/types";
-import { $, h, send, toast } from "./common";
+import { callsigns } from "./board";
+import { $, h, pad, send, toast } from "./common";
+import { appliedCount, stageCounts, stageStrip, STAGES, stageOf } from "./stages";
 import { OpsLog } from "./warroom/log";
-import {
-  afkStartFromOps,
-  clampUnits,
-  clock,
-  deriveTiles,
-  killSheet,
-  rankFor,
-  type Sitrep,
-  SlotMap,
-  span,
-  stopwatch,
-  type TileModel,
-  unitCounts,
-  zulu,
-} from "./warroom/model";
-import { type Blip, Radar } from "./warroom/radar";
+import { type MapPoint, UsMap } from "./warroom/map";
+import { afkStartFromOps, clampUnits, clock, deriveTiles, rankFor, type Sitrep, SlotMap, span, stopwatch, type TileModel } from "./warroom/model";
 import { deliveredClick, masterCaution, setSoundEnabled, unlockAudio } from "./warroom/sound";
-import { type T, TileView } from "./warroom/tiles";
+import { type T, TrackView } from "./warroom/tracks";
 
 // ---------------------------------------------------------------------------
 // state
@@ -41,59 +32,81 @@ let seenNeeds: Set<string> | null = null;
 let shown = new Set<string>();
 /** Latest ops events (for the AFK-start fallback). */
 let recentOps: OpsEvent[] = [];
-const tiles = new Map<string, TileView>();
+const tracks = new Map<string, TrackView>();
 const slots = new SlotMap();
 const drafts = new Map<string, string>();
 /** Company/title as seen while the job was in flight (confirmation pages often lack them). */
 const names = new Map<string, { company: string; title: string }>();
+let signs = new Map<string, number>();
+/** The locked unit (corner brackets). */
+let selected: string | null = null;
+let lastList: TileModel[] = [];
 
 const t: T = (key, vars) => copy(settings, key, vars);
 const chud = () => settings.ui.chud;
+const tgtOf = (jobId: string) => (signs.has(jobId) ? copy(settings, "theme.tgt", { n: pad(signs.get(jobId)!, 4) }) : "");
+
+// Per-viewer conveniences only; the page works the same without storage.
+const pref = {
+  get(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* private mode etc. */
+    }
+  },
+};
+let mapOn = pref.get("warroom.layer.map") === "1";
 
 // ---------------------------------------------------------------------------
 // elements
 
 const el = {
-  title: $("#wr-title"),
-  zulu: $("#wr-zulu"),
-  local: $("#wr-local"),
+  clock: $("#wr-clock"),
   live: $("#wr-live"),
   afkPip: $("#wr-afk-pip"),
   afkStrip: $("#wr-afk-strip"),
-  counts: $("#wr-counts"),
+  caution: $<HTMLButtonElement>("#wr-caution"),
+  cautionN: $("#wr-caution-n"),
   afk: $<HTMLButtonElement>("#wr-afk"),
   unitsOut: $("#wr-units"),
   unitsDec: $<HTMLButtonElement>("#wr-units-dec"),
   unitsInc: $<HTMLButtonElement>("#wr-units-inc"),
   pause: $<HTMLButtonElement>("#wr-pause"),
   sound: $<HTMLButtonElement>("#wr-sound"),
+  layerMap: $<HTMLButtonElement>("#wr-layer-map"),
   fs: $<HTMLButtonElement>("#wr-fs"),
-  radarMeta: $("#wr-radar-meta"),
-  kills: {
-    delivered: $("#wr-k-delivered"),
-    contacts: $("#wr-k-contacts"),
-    secured: $("#wr-k-secured"),
-    lost: $("#wr-k-lost"),
-  },
+  stages: $("#wr-stages"),
   rank: $("#wr-rank"),
-  rankBar: $("#wr-rank-bar"),
   rankNext: $("#wr-rank-next"),
-  rankInsignia: $("#wr-rank-insignia"),
-  tiles: $("#wr-tiles"),
+  table: $("#wr-tracks"),
+  list: $("#wr-track-list"),
   empty: $("#wr-empty"),
-  unitSummary: $("#wr-unit-summary"),
+  mapPanel: $("#wr-map-panel"),
+  map: $("#wr-map"),
   armInput: $<HTMLTextAreaElement>("#wr-arm-input"),
   armCount: $("#wr-arm-count"),
   armGo: $<HTMLButtonElement>("#wr-arm-go"),
-  countdown: $("#wr-countdown"),
-  cdNum: $("#wr-cd-num"),
-  cdSeq: $("#wr-cd-seq"),
-  cdAbort: $<HTMLButtonElement>("#wr-cd-abort"),
   modal: $("#wr-modal"),
 };
 
-const radar = new Radar($<HTMLCanvasElement>("#wr-radar"));
-const opsLog = new OpsLog($("#wr-log"), $("#wr-chips"), $<HTMLButtonElement>("#wr-log-new"), () => t);
+const opsLog = new OpsLog($("#wr-log"), $("#wr-chips"), $<HTMLButtonElement>("#wr-log-new"), () => t, () => ({ chud: chud(), tgt: tgtOf }));
+
+const usMap = new UsMap(() => ({
+  title: t("warroom.map.title"),
+  remote: (n) => t("warroom.map.remote", { n }),
+  unplaced: (n) => t("warroom.map.unplaced", { n }),
+  empty: t("warroom.map.empty"),
+}));
+el.map.append(usMap.el);
+usMap.onSelect = (jobId) => select(jobId, true);
 
 // ---------------------------------------------------------------------------
 // copy (static labels carry data-copy="warroom.key")
@@ -102,7 +115,10 @@ function applyCopy(): void {
   document.documentElement.dataset.mode = chud() ? "chud" : "plain";
   for (const node of document.querySelectorAll<HTMLElement>("[data-copy]")) node.textContent = t(node.dataset.copy as CopyKey);
   for (const node of document.querySelectorAll<HTMLElement>("[data-copy-placeholder]")) node.setAttribute("placeholder", t(node.dataset.copyPlaceholder as CopyKey));
-  radar.setRingLabels(t("warroom.radar.ring.outer"), t("warroom.radar.ring.mid"), t("warroom.radar.ring.inner"));
+  for (const node of document.querySelectorAll<HTMLElement>("[data-copy-label]")) {
+    node.setAttribute("aria-label", t(node.dataset.copyLabel as CopyKey));
+    node.title = t(node.dataset.copyLabel as CopyKey);
+  }
   opsLog.relabel();
   updateArmCount();
 }
@@ -127,61 +143,59 @@ function render(): void {
     if (!terminal && (m.company || m.title)) names.set(m.jobId, { company: m.company, title: m.title });
     else if (terminal && known) Object.assign(m, known);
   }
+  lastList = list;
+  if (selected && !list.some((m) => m.jobId === selected) && !jobs.some((j) => j.id === selected)) selected = null;
   const slotMap = slots.assign(list.map((m) => m.jobId));
-  renderTiles(list, slotMap, now);
+  renderTracks(list, slotMap, now);
   shown = new Set(list.map((m) => m.jobId));
 
-  // Radar: every tile plus the queue on the outer ring.
-  const blips: Blip[] = list.map((m) => ({ id: m.jobId, label: chud() ? `U${slotMap.get(m.jobId) ?? ""}` : `#${slotMap.get(m.jobId) ?? ""}`, phase: m.phase }));
-  for (const j of jobs) if (j.status === "queued") blips.push({ id: j.id, label: "", phase: "queued" });
-  radar.setBlips(blips);
-  el.radarMeta.textContent = t("warroom.radar.meta", { n: blips.length });
-
-  renderHeader(now);
-  renderKillSheet();
+  renderHeader(now, list);
+  renderTotals();
+  if (mapOn) renderMap();
 
   const holding = list.filter((m) => m.needs.length).length;
   document.title = `${holding ? `(${holding}) ` : ""}${t("warroom.doc_title")}`;
 }
 
-function renderTiles(list: TileModel[], slotMap: Map<string, number>, now: number): void {
+function renderTracks(list: TileModel[], slotMap: Map<string, number>, now: number): void {
   const ids = new Set(list.map((m) => m.jobId));
-  for (const [id, view] of tiles) {
+  for (const [id, view] of tracks) {
     if (ids.has(id)) continue;
     view.el.remove();
-    tiles.delete(id);
+    tracks.delete(id);
   }
   for (const m of list) {
-    let view = tiles.get(m.jobId);
+    let view = tracks.get(m.jobId);
     if (!view) {
-      view = new TileView(m.jobId, { t: () => t, send, drafts });
-      tiles.set(m.jobId, view);
-      view.el.classList.add("enter");
+      view = new TrackView(m.jobId, { t: () => t, send, drafts, select: (id) => select(id, false) });
+      tracks.set(m.jobId, view);
     }
-    view.update(m, slotMap.get(m.jobId) ?? 0, now, chud());
+    view.update(m, slotMap.get(m.jobId) ?? 0, tgtOf(m.jobId), now, chud(), m.jobId === selected);
   }
   // Keep DOM order = list order, moving nodes only when needed (moving would blur a focused input).
-  const want = list.map((m) => tiles.get(m.jobId)!.el);
-  const have = [...el.tiles.children];
+  const want = list.map((m) => tracks.get(m.jobId)!.el);
+  const have = [...el.list.children];
   if (want.length !== have.length || want.some((n, i) => n !== have[i])) {
     want.forEach((n, i) => {
-      if (el.tiles.children[i] !== n) el.tiles.insertBefore(n, el.tiles.children[i] ?? null);
+      if (el.list.children[i] !== n) el.list.insertBefore(n, el.list.children[i] ?? null);
     });
   }
   el.empty.hidden = list.length > 0;
-  el.tiles.hidden = list.length === 0;
-  const c = unitCounts(jobs);
-  el.unitSummary.textContent = t("warroom.counts", c);
+  el.table.hidden = list.length === 0;
 }
 
-function renderHeader(now: number): void {
-  el.zulu.textContent = zulu(now);
-  el.local.textContent = `LCL ${clock(now).slice(0, 5)}`;
-  const c = unitCounts(jobs);
-  el.counts.textContent = t("warroom.counts", c);
+function renderHeader(now: number, list: TileModel[]): void {
+  el.clock.textContent = chud() ? dtg(now) : clock(now).slice(0, 5);
+  el.clock.setAttribute("datetime", new Date(now).toISOString());
 
   el.live.dataset.state = !linkUp ? "down" : settings.paused ? "paused" : "live";
   el.live.textContent = !linkUp ? t("warroom.offline") : settings.paused ? t("warroom.paused") : t("warroom.live");
+
+  // Master caution: lit while any unit waits on you.
+  const holds = list.filter((m) => m.needs.length).length;
+  el.caution.dataset.lit = String(holds > 0);
+  el.cautionN.textContent = holds ? t("warroom.caution.count", { n: holds }) : "";
+  el.caution.title = holds ? t("warroom.caution.hint") : t("warroom.caution.clear");
 
   el.afk.setAttribute("aria-pressed", String(settings.afk));
   el.afkPip.hidden = !settings.afk;
@@ -197,29 +211,56 @@ function renderHeader(now: number): void {
   el.pause.setAttribute("aria-pressed", String(settings.paused));
   el.sound.textContent = settings.ui.sound ? t("warroom.ctl.sound_on") : t("warroom.ctl.sound_off");
   el.sound.setAttribute("aria-pressed", String(settings.ui.sound));
+  el.layerMap.setAttribute("aria-pressed", String(mapOn));
+  el.mapPanel.hidden = !mapOn;
   el.fs.textContent = document.fullscreenElement ? t("warroom.ctl.exit_fullscreen") : t("warroom.ctl.fullscreen");
 }
 
-function renderKillSheet(): void {
-  const k = killSheet(jobs);
-  for (const key of ["delivered", "contacts", "secured", "lost"] as const) el.kills[key].textContent = String(k[key]).padStart(3, "0");
-  const r = rankFor(k.delivered);
+let totalsSig = "";
+function renderTotals(): void {
+  const counts = stageCounts(jobs);
+  const r = rankFor(appliedCount(jobs));
+  const sig = `${chud()}|${JSON.stringify(counts)}|${r.index}|${r.toNext}`;
+  if (sig === totalsSig) return;
+  totalsSig = sig;
+  el.stages.replaceChildren(stageStrip(counts, (k) => t(k)));
   el.rank.textContent = t(`warroom.rank.${r.index}` as CopyKey);
-  el.rankBar.style.width = `${Math.round(r.progress * 100)}%`;
   el.rankNext.textContent = r.next == null ? t("warroom.rank.max") : t("warroom.rank.next", { n: r.toNext, rank: t(`warroom.rank.${r.next}` as CopyKey) });
-  if (el.rankInsignia.dataset.rank !== String(r.index)) {
-    el.rankInsignia.dataset.rank = String(r.index);
-    el.rankInsignia.replaceChildren(...insignia(r.index));
-  }
 }
 
-/** Chevrons / bars / stars for the rank badge (pure decoration). */
-function insignia(index: number): HTMLElement[] {
-  if (index === 0) return [h("i", { className: "ins dot" })];
-  if (index <= 4) return Array.from({ length: index }, () => h("i", { className: "ins chev" }));
-  if (index <= 6) return Array.from({ length: index - 4 }, () => h("i", { className: "ins bar" }));
-  return Array.from({ length: index - 6 }, () => h("i", { className: "ins star", textContent: "★" }));
+const STAGE_TONE = Object.fromEntries(STAGES.map((s) => [s.id, s.tone])) as Record<string, MapPoint["tone"]>;
+function renderMap(): void {
+  usMap.update(
+    jobs.map((j) => ({
+      jobId: j.id,
+      label: [companyName(j), j.title].filter(Boolean).join(" — ") || j.url,
+      location: j.location,
+      tone: j.status === "failed" ? "alert" : STAGE_TONE[stageOf(j.status)] ?? "status",
+      queued: j.status === "queued" || j.status === "saved",
+    })),
+  );
+  usMap.select(selected);
 }
+
+// ---------------------------------------------------------------------------
+// selection + master caution
+
+function select(jobId: string | null, scroll: boolean): void {
+  selected = jobId;
+  render();
+  if (scroll && jobId) tracks.get(jobId)?.el.scrollIntoView({ block: "nearest" });
+}
+
+/** Cycle the lock through units waiting on you, oldest hold first. */
+function nextCaution(): void {
+  const holds = lastList.filter((m) => m.needs.length).sort((a, b) => (a.holdingSince ?? 0) - (b.holdingSince ?? 0));
+  if (!holds.length) return;
+  const i = holds.findIndex((m) => m.jobId === selected);
+  const next = holds[(i + 1) % holds.length]!;
+  select(next.jobId, true);
+  tracks.get(next.jobId)?.focusOperator();
+}
+el.caution.addEventListener("click", nextCaution);
 
 // ---------------------------------------------------------------------------
 // data in
@@ -237,10 +278,20 @@ function mergeUnits(list: UnitState[]): void {
 function onNeeds(next: Need[]): void {
   if (seenNeeds) {
     const fresh = next.filter((n) => !seenNeeds!.has(n.id));
-    if (fresh.length && settings.ui.sound) masterCaution();
+    if (fresh.length) {
+      if (settings.ui.sound) masterCaution();
+      el.caution.classList.remove("flash");
+      void el.caution.offsetWidth;
+      el.caution.classList.add("flash");
+    }
   }
   seenNeeds = new Set(next.map((n) => n.id));
   needs = next;
+}
+
+function setJobs(next: Job[]): void {
+  jobs = next;
+  signs = callsigns(jobs);
 }
 
 api.runtime.onMessage.addListener((raw: unknown) => {
@@ -257,7 +308,7 @@ api.runtime.onMessage.addListener((raw: unknown) => {
 
 api.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  if (changes[STORAGE_KEYS.jobs]) jobs = (changes[STORAGE_KEYS.jobs]!.newValue as Job[] | undefined) ?? [];
+  if (changes[STORAGE_KEYS.jobs]) setJobs((changes[STORAGE_KEYS.jobs]!.newValue as Job[] | undefined) ?? []);
   if (changes[STORAGE_KEYS.needs]) onNeeds((changes[STORAGE_KEYS.needs]!.newValue as Need[] | undefined) ?? []);
   if (changes[STORAGE_KEYS.settings]) {
     const was = settings;
@@ -336,6 +387,12 @@ el.sound.addEventListener("click", () => {
   void patchSettings((raw) => ({ ...raw, ui: { ...normalizeSettings(raw).ui, sound: on } }));
 });
 
+el.layerMap.addEventListener("click", () => {
+  mapOn = !mapOn;
+  pref.set("warroom.layer.map", mapOn ? "1" : "0");
+  render();
+});
+
 el.fs.addEventListener("click", () => {
   if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
   else void document.documentElement.requestFullscreen().catch(() => undefined);
@@ -360,9 +417,7 @@ el.afk.addEventListener("click", async () => {
 for (const ev of ["pointerdown", "keydown"] as const) document.addEventListener(ev, unlockAudio, { passive: true });
 
 // ---------------------------------------------------------------------------
-// ARM TARGETS: paste URLs → LAUNCH IN 3·2·1 → addJobs
-
-let countdown: { timer: ReturnType<typeof setTimeout>; urls: string[] } | null = null;
+// ADD TARGETS: paste URLs → addJobs
 
 function updateArmCount(): void {
   const n = extractUrls(el.armInput.value).length;
@@ -374,54 +429,28 @@ el.armInput.addEventListener("input", updateArmCount);
 el.armInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
     e.preventDefault();
-    arm();
+    void arm();
   }
 });
-el.armGo.addEventListener("click", arm);
-el.cdAbort.addEventListener("click", abortCountdown);
+el.armGo.addEventListener("click", () => void arm());
 
-function arm(): void {
-  if (countdown) return;
+async function arm(): Promise<void> {
   const urls = extractUrls(el.armInput.value);
   if (!urls.length) {
     toast(t("warroom.arm.none"));
     el.armInput.focus();
     return;
   }
-  const seq = [3, 2, 1];
-  el.cdSeq.replaceChildren(...seq.map((n) => h("span", { textContent: String(n) })));
-  el.countdown.hidden = false;
-  el.cdAbort.focus();
-  let i = 0;
-  const step = () => {
-    if (i >= seq.length) return void launch(urls);
-    el.cdNum.textContent = String(seq[i]);
-    el.cdNum.classList.remove("pop");
-    void el.cdNum.offsetWidth;
-    el.cdNum.classList.add("pop");
-    [...el.cdSeq.children].forEach((c, k) => c.classList.toggle("on", k <= i));
-    i++;
-    countdown = { timer: setTimeout(step, 700), urls };
-  };
-  step();
-}
-
-function abortCountdown(): void {
-  if (!countdown) return;
-  clearTimeout(countdown.timer);
-  countdown = null;
-  el.countdown.hidden = true;
-  el.armInput.focus();
-}
-
-async function launch(urls: string[]): Promise<void> {
-  countdown = null;
-  el.countdown.hidden = true;
-  const n = await send<number>({ type: "addJobs", urls, start: true });
-  toast(n ? t("warroom.arm.launched", { n }) : t("warroom.arm.dupes"));
-  if (n) {
-    el.armInput.value = "";
-    updateArmCount();
+  el.armGo.disabled = true;
+  try {
+    const n = await send<number>({ type: "addJobs", urls, start: true });
+    toast(n ? t("warroom.arm.launched", { n }) : t("warroom.arm.dupes"));
+    if (n) {
+      el.armInput.value = "";
+      updateArmCount();
+    }
+  } finally {
+    el.armGo.disabled = false;
   }
 }
 
@@ -429,21 +458,23 @@ async function launch(urls: string[]): Promise<void> {
 // SITREP modal
 
 function showSitrep(rep: Sitrep): void {
-  const cell = (key: CopyKey, n: number, tone: string) =>
-    h("div", { className: `sr-cell tone-${tone}` }, h("b", { textContent: String(n).padStart(2, "0") }), h("span", { textContent: t(key) }));
+  const row = (key: CopyKey, n: number, tone: string) => {
+    const item = h("div", { className: `stage tone-${tone} ${n ? "" : "zero"}` }, h("dt", { textContent: t(key) }), h("dd", { textContent: String(n) }));
+    return item;
+  };
   const ack = h("button", { type: "button", className: "wr-btn primary", textContent: t("warroom.sitrep.ack") });
   const box = h(
     "div",
-    { className: "sr-box frame" },
-    h("div", { className: "sr-kicker", textContent: `${zulu(rep.until)} · ${t("warroom.sitrep.sub", { dur: span(rep.until - rep.since) })}` }),
+    { className: "sr-box" },
+    h("div", { className: "sr-kicker", textContent: `${chud() ? dtg(rep.until) : clock(rep.until).slice(0, 5)} · ${t("warroom.sitrep.sub", { dur: span(rep.until - rep.since) })}` }),
     h("h2", { id: "wr-sr-title", textContent: t("warroom.sitrep.title") }),
     h(
-      "div",
-      { className: "sr-grid" },
-      cell("warroom.sitrep.delivered", rep.delivered, "ok"),
-      cell("warroom.sitrep.holding", rep.holding, rep.holding ? "warn" : "dim"),
-      cell("warroom.sitrep.contacts", rep.contacts, rep.contacts ? "fire" : "dim"),
-      cell("warroom.sitrep.lost", rep.lost, rep.lost ? "alert" : "dim"),
+      "dl",
+      { className: "stages" },
+      row("warroom.sitrep.delivered", rep.delivered, "status"),
+      row("warroom.sitrep.holding", rep.holding, "warn"),
+      row("warroom.sitrep.contacts", rep.contacts, "advisory"),
+      row("warroom.sitrep.lost", rep.lost, "dim"),
     ),
     h("div", { className: "sr-actions" }, ack),
   );
@@ -467,7 +498,7 @@ document.addEventListener("keydown", (e) => {
   if (!el.modal.hidden) {
     el.modal.hidden = true;
     el.modal.replaceChildren();
-  } else if (countdown) abortCountdown();
+  } else if (selected && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) select(null, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -480,7 +511,7 @@ async function boot(): Promise<void> {
     settings?: unknown;
   };
   settings = normalizeSettings(got.settings);
-  jobs = got.jobs ?? [];
+  setJobs(got.jobs ?? []);
   onNeeds(got.needs ?? []);
   setSoundEnabled(settings.ui.sound);
   applyCopy();
@@ -498,7 +529,6 @@ async function boot(): Promise<void> {
     }
   }
   render();
-  radar.start();
   document.body.classList.add("booted");
 
   setInterval(() => {

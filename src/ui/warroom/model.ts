@@ -1,30 +1,13 @@
 // War Room pure logic: no DOM, no browser APIs, so it is unit-testable and
 // shared with the background (sitrep). Rendering lives in the sibling files.
-import type { Job, JobStatus, Need, OpsEvent, OpsKind, UnitPhase, UnitState } from "../../shared/types";
+import { dtgShort } from "../../shared/display";
+import type { FieldCheck, Job, JobStatus, Need, OpsEvent, OpsKind, UnitPhase, UnitState } from "../../shared/types";
 
-/** What a tile / blip shows. "queued" exists only for the radar's outer ring. */
+/** What a track row shows. "queued" is a job waiting for a free unit. */
 export type DisplayPhase = UnitPhase | "queued";
 
 const ACTIVE: JobStatus[] = ["running", "needs_you", "ready_to_submit"];
 const APPLIED: JobStatus[] = ["submitted", "interviewing", "offer", "rejected"];
-
-// ---------------------------------------------------------------------------
-// hashing (stable per job id)
-
-/** FNV-1a 32-bit. */
-export function hash32(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
-/** Four-digit target designator, e.g. "0042". Cosmetic, stable per job. */
-export function tgtNumber(jobId: string): string {
-  return String(hash32(jobId) % 10000).padStart(4, "0");
-}
 
 // ---------------------------------------------------------------------------
 // rank
@@ -51,89 +34,6 @@ export function rankFor(delivered: number): RankInfo {
   const lo = RANK_THRESHOLDS[index]!;
   const hi = RANK_THRESHOLDS[index + 1]!;
   return { index, next: index + 1, toNext: hi - n, progress: (n - lo) / (hi - lo) };
-}
-
-// ---------------------------------------------------------------------------
-// kill sheet
-
-export interface KillSheet {
-  delivered: number;
-  contacts: number;
-  secured: number;
-  lost: number;
-}
-
-export function killSheet(jobs: Job[]): KillSheet {
-  let delivered = 0;
-  let contacts = 0;
-  let secured = 0;
-  let lost = 0;
-  for (const j of jobs) {
-    if (j.appliedAt != null || APPLIED.includes(j.status)) delivered++;
-    if (j.status === "interviewing" || j.status === "offer") contacts++;
-    if (j.status === "offer") secured++;
-    if (j.status === "failed" || j.status === "rejected") lost++;
-  }
-  return { delivered, contacts, secured, lost };
-}
-
-// ---------------------------------------------------------------------------
-// radar geometry
-
-export type Ring = "edge" | "outer" | "mid" | "inner" | "core";
-
-/** Normalized radius (0 = center, 1 = rim) for each ring. */
-export const RING_RADIUS: Record<Ring, number> = { edge: 0.97, outer: 0.84, mid: 0.58, inner: 0.32, core: 0.08 };
-
-/** outer = queued/opening/recon, mid = filling/advancing, inner = holding/releasing. */
-export function ringOf(phase: DisplayPhase): Ring {
-  switch (phase) {
-    case "queued":
-    case "opening":
-    case "recon":
-      return "outer";
-    case "filling":
-    case "advancing":
-      return "mid";
-    case "holding":
-    case "releasing":
-      return "inner";
-    case "delivered":
-      return "core";
-    case "lost":
-      return "edge";
-  }
-}
-
-/** Bearing in radians (0 = north, clockwise), stable per id. */
-export function hashAngle(id: string): number {
-  return ((hash32(id) % 3600) / 3600) * Math.PI * 2;
-}
-
-/** Small stable radial jitter (±0.05) so blips on one ring don't stack. */
-export function hashJitter(id: string): number {
-  return ((hash32(`${id}#r`) % 1000) / 1000 - 0.5) * 0.1;
-}
-
-export function blipPolar(id: string, phase: DisplayPhase): { angle: number; r: number } {
-  const ring = ringOf(phase);
-  const jitter = ring === "core" || ring === "edge" ? 0 : hashJitter(id);
-  return { angle: hashAngle(id), r: Math.max(0, Math.min(1, RING_RADIUS[ring] + jitter)) };
-}
-
-/** Polar (bearing from north, clockwise) to canvas coordinates. */
-export function polarToXY(angle: number, r: number, cx: number, cy: number, radius: number): { x: number; y: number } {
-  return { x: cx + Math.sin(angle) * r * radius, y: cy - Math.cos(angle) * r * radius };
-}
-
-/**
- * Phosphor persistence: 1 right after the sweep passes a bearing, fading to
- * `floor` one full turn later.
- */
-export function phosphor(sweep: number, angle: number, floor = 0.28): number {
-  const tau = Math.PI * 2;
-  const behind = (((sweep - angle) % tau) + tau) % tau;
-  return Math.max(floor, 1 - behind / tau);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,26 +80,30 @@ export const LOG_FILTERS: LogFilter[] = ["all", "ops", "intel", "errors"];
 const FILTER_KINDS: Record<Exclude<LogFilter, "all">, OpsKind[]> = {
   ops: ["launch", "intervene", "release", "deliver", "lost", "afk", "system"],
   intel: ["intel", "contact"],
-  errors: ["error", "lost"],
+  errors: ["error"],
 };
 
 export function matchesFilter(kind: OpsKind, filter: LogFilter): boolean {
   return filter === "all" || FILTER_KINDS[filter].includes(kind);
 }
 
-/** Color family for a log kind (maps to CSS classes). */
-export function kindTone(kind: OpsKind): "ok" | "warn" | "fire" | "alert" | "dim" {
+/** Signal colors, cockpit doctrine: red warning, amber caution, green normal, cyan advisory, white status. */
+export type Tone = "ok" | "warn" | "alert" | "advisory" | "status" | "dim";
+
+/** Color for a log kind. Red is for real failures only; a rejection is not one. */
+export function kindTone(kind: OpsKind): Tone {
   switch (kind) {
     case "launch":
-    case "deliver":
       return "ok";
     case "intervene":
     case "afk":
       return "warn";
+    case "deliver":
     case "release":
+      return "status";
     case "contact":
-      return "fire";
-    case "lost":
+    case "intel":
+      return "advisory";
     case "error":
       return "alert";
     default:
@@ -209,22 +113,23 @@ export function kindTone(kind: OpsKind): "ok" | "warn" | "fire" | "alert" | "dim
 
 export interface LogLine {
   id: string;
+  /** Short date-time group ("121736Z") in chud mode, local "HH:MM" in plain mode. */
   time: string;
   kind: OpsKind;
-  tone: ReturnType<typeof kindTone>;
+  tone: Tone;
   text: string;
 }
 
-export function logLine(e: OpsEvent, utc = false): LogLine {
-  return { id: e.id, time: clock(e.t, utc), kind: e.kind, tone: kindTone(e.kind), text: shortenUrls(e.text) };
+export function logLine(e: OpsEvent, chud = true): LogLine {
+  return { id: e.id, time: chud ? dtgShort(e.t) : clock(e.t).slice(0, 5), kind: e.kind, tone: kindTone(e.kind), text: shortenUrls(e.text) };
 }
 
-/** Terminal-friendly URLs: "https://www.acme.com/jobs/123?src=x" → "acme.com/jobs/123". */
-export function shortenUrls(text: string, max = 40): string {
+/** Log-friendly URLs: "https://www.acme.com/jobs/123?src=x" → "acme.com/jobs/123" (host and path, no port). */
+export function shortenUrls(text: string, max = 48): string {
   return text.replace(/https?:\/\/[^\s·|]+/gi, (u) => {
     try {
       const x = new URL(u);
-      const s = x.host.replace(/^www\./, "") + (x.pathname === "/" ? "" : x.pathname.replace(/\/$/, ""));
+      const s = x.hostname.replace(/^www\./, "") + (x.pathname === "/" ? "" : x.pathname.replace(/\/$/, ""));
       return s.length > max ? `${s.slice(0, max - 1)}…` : s;
     } catch {
       return u;
@@ -293,10 +198,10 @@ export function afkStartFromOps(ops: OpsEvent[]): number | null {
 
 export interface TileModel {
   jobId: string;
-  tgt: string;
   company: string;
   title: string;
   url: string;
+  location: string;
   status: JobStatus;
   phase: DisplayPhase;
   /** Every open need is a review_submit (awaiting release). */
@@ -305,8 +210,10 @@ export interface TileModel {
   fieldsDone: number;
   fieldsTotal: number;
   currentField: string;
+  /** Field checklist for the current form step (from the content script). */
+  fields: FieldCheck[];
   needs: Need[];
-  /** Oldest open need's createdAt, for the HOLDING mm:ss timer. */
+  /** Oldest open need's createdAt, for the HOLD mm:ss timer. */
   holdingSince: number | null;
   thumb?: string;
   createdAt: number;
@@ -353,10 +260,10 @@ export function deriveTiles(
     const total = unit?.fieldsTotal ?? 0;
     out.push({
       jobId: job.id,
-      tgt: tgtNumber(job.id),
       company: job.company,
       title: job.title,
       url: job.url,
+      location: job.location,
       status: job.status,
       phase,
       ready: jobNeeds.length > 0 && jobNeeds.every((n) => n.kind === "review_submit"),
@@ -364,6 +271,7 @@ export function deriveTiles(
       fieldsDone: phase === "delivered" && total ? total : Math.min(unit?.fieldsDone ?? 0, total || Infinity),
       fieldsTotal: total,
       currentField: unit?.currentField ?? "",
+      fields: unit?.fields ?? [],
       needs: jobNeeds,
       holdingSince: jobNeeds.length ? Math.min(...jobNeeds.map((n) => n.createdAt)) : null,
       ...(unit?.thumb ? { thumb: unit.thumb } : {}),
@@ -382,16 +290,8 @@ export function progressOf(t: Pick<TileModel, "fieldsDone" | "fieldsTotal" | "ph
   return Math.max(0, Math.min(1, t.fieldsDone / t.fieldsTotal));
 }
 
-/** Schematic rows (form wireframe) filled for a given progress. */
-export function schematicRows(t: Pick<TileModel, "fieldsDone" | "fieldsTotal" | "phase">, rows = 6): { filled: number; active: number } {
-  const p = progressOf(t);
-  const filled = Math.round(p * rows);
-  const working = t.phase === "filling" || t.phase === "recon" || t.phase === "opening";
-  return { filled, active: working && filled < rows ? filled : -1 };
-}
-
 /**
- * Stable UNIT-0N numbers: a job keeps its slot while on screen; freed slots
+ * Stable unit slots (ALPHA, BRAVO…): a job keeps its slot while on screen; freed slots
  * are reused lowest-first.
  */
 export class SlotMap {
@@ -410,19 +310,6 @@ export class SlotMap {
     }
     return new Map(this.slots);
   }
-}
-
-/** Header counters. */
-export function unitCounts(jobs: Job[]): { active: number; holding: number; queued: number } {
-  let active = 0;
-  let holding = 0;
-  let queued = 0;
-  for (const j of jobs) {
-    if (j.status === "running") active++;
-    else if (j.status === "needs_you" || j.status === "ready_to_submit") holding++;
-    else if (j.status === "queued") queued++;
-  }
-  return { active, holding, queued };
 }
 
 /** Clamp the War Room's UNITS stepper (settings.concurrency). */

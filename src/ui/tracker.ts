@@ -6,6 +6,8 @@ import type { Job, JobStatus, Settings } from "../shared/types";
 import { BOARD_COLUMNS, type BoardColumn, callsigns, dropStatus, groupForBoard } from "./board";
 import { $, applyCopy, download, h, JOB_STATUSES, pad, send, statusLabel, toast } from "./common";
 import { renderIntelFeed } from "./intelFeed";
+import { appliedCount, stageCounts, stageStrip, STAGES } from "./stages";
+import { companyName } from "../shared/display";
 import { openSheetImport } from "./sheetImport";
 
 let jobs: Job[] = [];
@@ -39,20 +41,11 @@ let view: "table" | "board" = pref.get("aim.tracker.view") === "board" ? "board"
 let lostOpen = pref.get("aim.board.lostOpen") === "1";
 
 function renderStats(): void {
-  const count = (pred: (j: Job) => boolean) => jobs.filter(pred).length;
   const weekAgo = Date.now() - 7 * 86400_000;
-  const items: [CopyKey, number, string][] = [
-    ["theme.stat.applied", count((j) => ["submitted", "interviewing", "offer", "rejected"].includes(j.status)), "good"],
-    ["theme.stat.week", count((j) => !!j.appliedAt && j.appliedAt > weekAgo), ""],
-    ["theme.stat.needs", count((j) => j.status === "needs_you" || j.status === "ready_to_submit"), "crit"],
-    ["theme.stat.running", count((j) => j.status === "running"), ""],
-    ["theme.stat.queued", count((j) => j.status === "queued"), ""],
-    ["theme.stat.contact", count((j) => j.status === "interviewing"), "warm"],
-    ["theme.stat.offers", count((j) => j.status === "offer"), "good"],
-  ];
-  $("#stats").replaceChildren(
-    ...items.map(([k, v, cls]) => h("div", { className: `stat ${cls} ${v ? "" : "zero"}` }, h("b", { textContent: pad(v) }), h("span", { textContent: c(k) }))),
-  );
+  const strip = stageStrip(stageCounts(jobs), (k) => c(k));
+  const week = appliedCount(jobs, weekAgo);
+  strip.append(h("div", { className: "stage-aside", textContent: c("theme.tracker.week", { n: week }) }));
+  $("#stats").replaceChildren(strip);
 }
 
 function statusSelect(j: Job): HTMLSelectElement {
@@ -102,7 +95,7 @@ function row(j: Job): HTMLTableRowElement {
       {},
       h("div", { className: "tgt", textContent: tgt(j) }),
       h("div", { className: "title" }, jobLink(j)),
-      h("div", { className: "where", textContent: [j.company, j.location].filter(Boolean).join(" · ") }),
+      h("div", { className: "where", textContent: [companyName(j), j.location].filter(Boolean).join(" · ") }),
     ),
     h("td", {}, statusSelect(j), j.aiDrafted ? h("div", { className: "ai", textContent: c("theme.tracker.ai", { n: j.aiDrafted, s: j.aiDrafted === 1 ? "" : "s" }) }) : ""),
     h("td", { className: "date", textContent: fmt(j.appliedAt) }),
@@ -139,7 +132,7 @@ function boardCard(j: Job): HTMLElement {
     "article",
     { className: `bcard`, draggable: true, tabIndex: 0 },
     h("div", { className: "top" }, h("span", { className: "tgt", textContent: tgt(j) }), h("span", { textContent: j.ats.replace(/^(boards|jobs|careers)\./, "") })),
-    h("div", { className: "co", textContent: j.company || "—" }),
+    h("div", { className: "co", textContent: companyName(j) || "—" }),
     h("div", { className: "ti" }, jobLink(j)),
     h(
       "div",
@@ -170,22 +163,19 @@ function boardCard(j: Job): HTMLElement {
   return card;
 }
 
-function boardColumn(col: BoardColumn, list: Job[], i: number): HTMLElement {
-  const collapsed = !!col.collapsed && !lostOpen;
-  const header = h(
-    "header",
-    {},
-    h("span", { className: "idx", textContent: pad(i + 1) }),
-    h("span", { className: "t", textContent: c(col.title) }),
-    h("span", { className: "n", textContent: pad(list.length) }),
-  );
-  const cards = h("div", { className: "cards" }, ...(list.length ? list.map(boardCard) : [h("div", { className: "none", textContent: c("theme.board.empty") })]));
-  const el = h("section", { className: `bcol ${collapsed ? "collapsed" : ""} ${col.drop ? "" : "nodrop"}` }, header, cards);
+function boardColumn(col: BoardColumn, list: Job[]): HTMLElement {
+  // Empty columns, and Lost unless opened, shrink to a thin rail.
+  const lostClosed = col.id === "lost" && !lostOpen;
+  const rail = !list.length || lostClosed;
+  const tone = STAGES.find((s) => s.id === col.id)?.tone ?? "status";
+  const header = h("header", {}, h("span", { className: "t", textContent: c(col.title) }), h("span", { className: "n", textContent: String(list.length) }));
+  const cards = h("div", { className: "cards" }, ...list.map(boardCard));
+  const el = h("section", { className: `bcol ${rail ? "rail" : ""} ${col.id === "lost" && list.length ? "toggle" : ""} ${col.drop ? "" : "nodrop"}` }, header, cards);
   el.dataset.col = col.id;
+  el.dataset.tone = tone;
   el.setAttribute("aria-label", `${c(col.title)} (${list.length})`);
   if (col.drop) el.title = c("theme.hint.drop");
-  if (col.collapsed) {
-    header.style.cursor = "pointer";
+  if (col.id === "lost" && list.length) {
     header.addEventListener("click", () => {
       lostOpen = !lostOpen;
       pref.set("aim.board.lostOpen", lostOpen ? "1" : "0");
@@ -220,7 +210,7 @@ function boardColumn(col: BoardColumn, list: Job[], i: number): HTMLElement {
 
 function renderBoard(): void {
   const groups = groupForBoard(filtered());
-  $("#board").replaceChildren(...BOARD_COLUMNS.map((col, i) => boardColumn(col, groups[col.id], i)));
+  $("#board").replaceChildren(...BOARD_COLUMNS.map((col) => boardColumn(col, groups[col.id])));
 }
 
 function renderView(): void {

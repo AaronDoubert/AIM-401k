@@ -1,27 +1,29 @@
 import type { CopyKey } from "../shared/copy";
 import type { Job, JobStatus } from "../shared/types";
+import { type StageId, STAGES } from "./stages";
 
 // Tracker board view: pure grouping logic (unit-tested), no DOM.
 
 export interface BoardColumn {
-  id: "targeted" | "engaged" | "holding" | "delivered" | "contact" | "secured" | "lost";
+  id: StageId;
   title: CopyKey;
   statuses: JobStatus[];
   /** Status a card gets when dropped here; null = not a drop target (runtime state). */
   drop: JobStatus | null;
-  /** Rendered as a narrow strip until expanded. */
-  collapsed?: boolean;
 }
 
-export const BOARD_COLUMNS: BoardColumn[] = [
-  { id: "targeted", title: "theme.board.targeted", statuses: ["saved", "queued"], drop: "saved" },
-  { id: "engaged", title: "theme.board.engaged", statuses: ["running"], drop: null },
-  { id: "holding", title: "theme.board.holding", statuses: ["needs_you", "ready_to_submit"], drop: null },
-  { id: "delivered", title: "theme.board.delivered", statuses: ["submitted"], drop: "submitted" },
-  { id: "contact", title: "theme.board.contact", statuses: ["interviewing"], drop: "interviewing" },
-  { id: "secured", title: "theme.board.secured", statuses: ["offer"], drop: "offer" },
-  { id: "lost", title: "theme.board.lost", statuses: ["rejected", "failed", "skipped"], drop: "rejected", collapsed: true },
-];
+/** Board columns are the shared stages (src/ui/stages.ts), plus drop rules. */
+const DROP: Record<StageId, JobStatus | null> = {
+  targets: "saved",
+  engaged: null,
+  hold: null,
+  splash: "submitted",
+  contact: "interviewing",
+  secured: "offer",
+  lost: "rejected",
+};
+
+export const BOARD_COLUMNS: BoardColumn[] = STAGES.map((s) => ({ id: s.id, title: s.title, statuses: s.statuses, drop: DROP[s.id] }));
 
 export function columnFor(status: JobStatus): BoardColumn["id"] {
   return (BOARD_COLUMNS.find((c) => c.statuses.includes(status)) ?? BOARD_COLUMNS[0]!).id;

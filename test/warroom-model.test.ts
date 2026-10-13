@@ -3,33 +3,24 @@ import { copy } from "../src/shared/copy";
 import * as wr from "../src/shared/copy/warroom";
 import { DEFAULT_SETTINGS } from "../src/shared/defaults";
 import type { Job, JobStatus, Need, OpsEvent, OpsKind, UnitState } from "../src/shared/types";
+import { appliedCount, stageCounts } from "../src/ui/stages";
 import {
   afkStartFromOps,
-  blipPolar,
   clampUnits,
   clock,
   deriveTiles,
   displayPhase,
-  hashAngle,
-  killSheet,
   logLine,
   matchesFilter,
   mergeOps,
-  phosphor,
-  polarToXY,
   progressOf,
   RANK_THRESHOLDS,
   rankFor,
-  RING_RADIUS,
-  ringOf,
-  schematicRows,
   shortenUrls,
   SlotMap,
   span,
   stopwatch,
   summarizeSitrep,
-  tgtNumber,
-  unitCounts,
   zulu,
 } from "../src/ui/warroom/model";
 
@@ -95,8 +86,8 @@ describe("rank", () => {
   });
 });
 
-describe("kill sheet", () => {
-  it("counts delivered, contacts, offers and losses from job statuses", () => {
+describe("stages", () => {
+  it("puts every job in exactly one stage, the same counts every view shows", () => {
     const jobs = [
       job("a", "submitted", { appliedAt: T0 }),
       job("b", "interviewing", { appliedAt: T0 }),
@@ -105,57 +96,14 @@ describe("kill sheet", () => {
       job("e", "failed"),
       job("f", "running"),
       job("g", "skipped"),
+      job("h", "saved"),
+      job("i", "queued"),
+      job("j", "needs_you"),
+      job("k", "ready_to_submit"),
     ];
-    expect(killSheet(jobs)).toEqual({ delivered: 4, contacts: 2, secured: 1, lost: 2 });
-  });
-});
-
-describe("radar geometry", () => {
-  it("maps phases to rings", () => {
-    expect(["queued", "opening", "recon"].map((p) => ringOf(p as never))).toEqual(["outer", "outer", "outer"]);
-    expect(ringOf("filling")).toBe("mid");
-    expect(ringOf("advancing")).toBe("mid");
-    expect(ringOf("holding")).toBe("inner");
-    expect(ringOf("releasing")).toBe("inner");
-    expect(ringOf("delivered")).toBe("core");
-    expect(ringOf("lost")).toBe("edge");
-    expect(RING_RADIUS.outer).toBeGreaterThan(RING_RADIUS.mid);
-    expect(RING_RADIUS.mid).toBeGreaterThan(RING_RADIUS.inner);
-  });
-
-  it("gives each job a stable bearing in [0, 2π)", () => {
-    const a = hashAngle("job_abc123");
-    expect(hashAngle("job_abc123")).toBe(a);
-    expect(a).toBeGreaterThanOrEqual(0);
-    expect(a).toBeLessThan(Math.PI * 2);
-    const spread = new Set(Array.from({ length: 50 }, (_, i) => Math.round(hashAngle(`job_${i}`) * 10)));
-    expect(spread.size).toBeGreaterThan(30);
-  });
-
-  it("keeps the bearing and moves the range as the phase changes", () => {
-    const outer = blipPolar("job_x", "recon");
-    const mid = blipPolar("job_x", "filling");
-    const inner = blipPolar("job_x", "holding");
-    expect(outer.angle).toBe(mid.angle);
-    expect(mid.angle).toBe(inner.angle);
-    expect(outer.r).toBeGreaterThan(mid.r);
-    expect(mid.r).toBeGreaterThan(inner.r);
-    expect(Math.abs(mid.r - RING_RADIUS.mid)).toBeLessThanOrEqual(0.05);
-  });
-
-  it("projects bearings clockwise from north", () => {
-    const n = polarToXY(0, 1, 100, 100, 50);
-    expect(n.x).toBeCloseTo(100);
-    expect(n.y).toBeCloseTo(50);
-    const e = polarToXY(Math.PI / 2, 1, 100, 100, 50);
-    expect(e.x).toBeCloseTo(150);
-    expect(e.y).toBeCloseTo(100);
-  });
-
-  it("phosphor glow peaks right behind the sweep and decays to a floor", () => {
-    expect(phosphor(1, 1)).toBeCloseTo(1);
-    expect(phosphor(1 + Math.PI, 1)).toBeCloseTo(0.5);
-    expect(phosphor(1 - 0.01, 1, 0.3)).toBe(0.3);
+    expect(stageCounts(jobs)).toEqual({ targets: 2, engaged: 1, hold: 2, splash: 1, contact: 1, secured: 1, lost: 3 });
+    expect(appliedCount(jobs)).toBe(4);
+    expect(appliedCount(jobs, T0 - 1)).toBe(3);
   });
 });
 
@@ -183,20 +131,22 @@ describe("ops log", () => {
     expect(matchesFilter("intel", "ops")).toBe(false);
     expect(matchesFilter("contact", "intel")).toBe(true);
     expect(matchesFilter("error", "errors")).toBe(true);
-    expect(matchesFilter("lost", "errors")).toBe(true);
+    expect(matchesFilter("lost", "errors")).toBe(false); // a rejection isn't a fault
     expect(matchesFilter("deliver", "errors")).toBe(false);
   });
 
   it("formats a line with time, tone and shortened URLs", () => {
-    const l = logLine({ id: "1", t: T0, kind: "launch", text: "UNIT EN ROUTE · https://www.acme.com/careers/123?gh_src=abc" }, true);
-    expect(l).toMatchObject({ time: "14:03:22", kind: "launch", tone: "ok", text: "UNIT EN ROUTE · acme.com/careers/123" });
-    expect(logLine(op("2", "lost", T0)).tone).toBe("alert");
+    const l = logLine({ id: "1", t: T0, kind: "launch", text: "Acme · https://www.acme.com/careers/123?gh_src=abc" }, true);
+    expect(l).toMatchObject({ time: "121403Z", kind: "launch", tone: "ok", text: "Acme · acme.com/careers/123" });
+    expect(logLine(op("2", "lost", T0)).tone).toBe("dim");
+    expect(logLine(op("2", "error", T0)).tone).toBe("alert");
     expect(logLine(op("3", "intervene", T0)).tone).toBe("warn");
-    expect(logLine(op("4", "release", T0)).tone).toBe("fire");
+    expect(logLine(op("4", "deliver", T0)).tone).toBe("status");
+    expect(logLine(op("5", "contact", T0)).tone).toBe("advisory");
   });
 
   it("shortens long URLs and leaves other text alone", () => {
-    expect(shortenUrls("see http://127.0.0.1:8080/warroom/apply.html?wr=1 now")).toBe("see 127.0.0.1:8080/warroom/apply.html now");
+    expect(shortenUrls("see http://127.0.0.1:8080/warroom/apply.html?wr=1 now")).toBe("see 127.0.0.1/warroom/apply.html now");
     expect(shortenUrls(`x https://a.io/${"p".repeat(80)}`, 20)).toBe(`x a.io/${"p".repeat(14)}…`);
     expect(shortenUrls("DELIVERED · Acme · Engineer")).toBe("DELIVERED · Acme · Engineer");
   });
@@ -279,17 +229,12 @@ describe("unit tiles", () => {
     expect(run).toMatchObject({ step: 2, fieldsDone: 3, fieldsTotal: 6, currentField: "Email", ready: false, holdingSince: null });
     expect(tiles[1]).toMatchObject({ ready: true, holdingSince: T0 - 1000 });
     expect(tiles[2]!.fieldsDone).toBe(10);
-    expect(tgtNumber("run")).toMatch(/^\d{4}$/);
-    expect(run.tgt).toBe(tgtNumber("run"));
   });
 
-  it("computes progress and schematic rows", () => {
+  it("computes progress", () => {
     expect(progressOf({ fieldsDone: 3, fieldsTotal: 6, phase: "filling" })).toBe(0.5);
     expect(progressOf({ fieldsDone: 0, fieldsTotal: 0, phase: "filling" })).toBe(0);
     expect(progressOf({ fieldsDone: 0, fieldsTotal: 0, phase: "delivered" })).toBe(1);
-    expect(schematicRows({ fieldsDone: 3, fieldsTotal: 6, phase: "filling" }, 6)).toEqual({ filled: 3, active: 3 });
-    expect(schematicRows({ fieldsDone: 3, fieldsTotal: 6, phase: "holding" }, 6)).toEqual({ filled: 3, active: -1 });
-    expect(schematicRows({ fieldsDone: 6, fieldsTotal: 6, phase: "filling" }, 6)).toEqual({ filled: 6, active: -1 });
   });
 
   it("keeps UNIT numbers stable and reuses freed slots", () => {
@@ -301,12 +246,7 @@ describe("unit tiles", () => {
     expect(next.get("d")).toBe(2);
   });
 
-  it("counts header totals and clamps the UNITS stepper", () => {
-    expect(unitCounts([job("a", "running"), job("b", "needs_you"), job("c", "ready_to_submit"), job("d", "queued"), job("e", "submitted")])).toEqual({
-      active: 1,
-      holding: 2,
-      queued: 1,
-    });
+  it("clamps the parallel-units stepper", () => {
     expect([0, 1, 3.4, 6, 9, Number.NaN].map(clampUnits)).toEqual([1, 1, 3, 6, 6, 1]);
   });
 });
@@ -328,7 +268,7 @@ describe("warroom copy", () => {
     expect(copy(chud, "warroom.op.title")).toBe("OPERATOR INPUT REQUIRED");
     expect(copy(plain, "warroom.op.title")).toBe("Needs your input");
     expect(copy(plain, "warroom.sitrep.line", { dur: "1h 05m", delivered: 3, holding: 1, contacts: 0, lost: 2 })).toBe(
-      "While you were away (1h 05m): 3 applied, 1 need you, 0 replies, 2 stopped",
+      "While you were away (1h 05m): 3 applied, 1 need you, 0 replies, 2 closed",
     );
   });
 });

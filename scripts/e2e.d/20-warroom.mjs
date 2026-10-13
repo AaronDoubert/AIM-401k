@@ -6,10 +6,9 @@ import { join } from "node:path";
 
 const ACTIVE = ["queued", "running", "needs_you", "ready_to_submit"];
 
-/** Scroll the unit grid (not the page) so this tile's row is at the top. */
+/** Scroll the track table (not the page) so this row is at the top. */
 function scrollTileIntoGrid(el) {
-  const grid = el.parentElement;
-  grid.scrollTop = el.offsetTop - grid.offsetTop - 2;
+  el.scrollIntoView({ block: "start" });
 }
 
 export default async function warroom(t) {
@@ -42,10 +41,11 @@ export default async function warroom(t) {
   try {
     // --- Shell ---------------------------------------------------------------
     check((await wr.locator("#wr-title").innerText()).includes("OPERATION GAINFUL"), "War Room header renders");
-    check(/^\d\d:\d\d:\d\dZ$/.test((await wr.locator("#wr-zulu").innerText()).trim()), "UTC clock ticks HH:MM:SSZ");
+    check(/^\d{6}Z[A-Z]{3}\d\d$/.test((await wr.locator("#wr-clock").innerText()).trim()), `clock is a date-time group (${await wr.locator("#wr-clock").innerText()})`);
+    check((await wr.locator(".wr-banner").count()) === 2 && /CUI/.test(await wr.locator(".wr-banner").first().innerText()), "CUI banner top and bottom");
     const history = await wr.locator("#wr-log .ln").count();
     check(history > 0, `ops log loaded history via getOps (${history} lines)`);
-    check((await wr.locator("#wr-k-delivered").innerText()).trim() !== "000", "kill sheet counts earlier deliveries");
+    check(Number(await wr.locator('#wr-stages .stage[data-stage="splash"] dd').innerText()) >= 1, "stage totals count earlier deliveries");
 
     // --- Controls --------------------------------------------------------------
     await wr.click("#wr-pause");
@@ -67,17 +67,13 @@ export default async function warroom(t) {
     await wr.fill("#wr-arm-input", `tonight's targets:\n${urls.join("\n")}\n(that's all)`);
     check(/3/.test(await wr.locator("#wr-arm-count").innerText()), "ARM TARGETS extracts 3 URLs");
     await wr.click("#wr-arm-go");
-    await wr.waitForSelector("#wr-countdown:not([hidden])", { timeout: 2000 });
-    check(/LAUNCH IN/.test(await wr.locator("#wr-countdown").innerText()), "LAUNCH IN 3·2·1 countdown");
-    await sleep(250);
-    await shot(wr, "warroom-countdown.png");
     let s = await waitFor("War Room targets queued", (s) => urls.every((u) => s.jobs.some((j) => j.url === u)), 10000);
     const [jobA, jobB, jobC] = urls.map((u) => s.jobs.find((j) => j.url === u));
 
     // --- Unit tile appears and progresses ------------------------------------
-    const tileA = wr.locator(`.tile[data-job="${jobA.id}"]`);
+    const tileA = wr.locator(`.track[data-job="${jobA.id}"]`);
     await tileA.waitFor({ timeout: 10000 });
-    check(true, "unit tile appears for a launched target");
+    check(true, "track row appears for a launched target");
     const seen = [];
     let midShot = false;
     for (const until = Date.now() + 30000; Date.now() < until; ) {
@@ -109,7 +105,11 @@ export default async function warroom(t) {
     const units = await msg({ type: "getUnits" });
     const uA = Array.isArray(units) && units.find((u) => u.jobId === jobA.id);
     check(!!uA && uA.fieldsTotal > 0 && uA.step >= 2, `getUnits reports unit state (${uA && `${uA.phase} ${uA.fieldsDone}/${uA.fieldsTotal} step ${uA.step}`})`);
-    check((await wr.locator(".viz .thumb").count()) === 0 && (await tileA.locator(".schematic .srow").count()) === 6, "no captureTab in Chromium: schematic fallback rendered");
+    const checks = await tileA.locator(".checklist li").evaluateAll((els) => els.map((e) => `${e.dataset.state}:${e.querySelector("span")?.textContent}`));
+    check(checks.length > 0 && checks.some((c) => c.startsWith("ok:")), `field checklist rendered (${checks.slice(0, 5).join(", ")})`);
+    await tileA.locator(".track-row").click();
+    check(await tileA.evaluate((e) => e.classList.contains("locked")), "clicking a row locks it (brackets)");
+    check((await wr.locator(".track.locked").count()) === 1, "only the locked row has brackets");
 
     // --- Thumbnails (Firefox captureTab path, simulated) -----------------------
     // Chromium can't capture background tabs, so hand the War Room a units
@@ -123,7 +123,7 @@ export default async function warroom(t) {
     const live = await msg({ type: "getUnits" });
     await ext.evaluate((units) => chrome.runtime.sendMessage({ type: "units", units }).catch(() => undefined), live.map((u) => (thumbs[u.jobId] ? { ...u, thumb: thumbs[u.jobId] } : u)));
     const thumbShown = await tileA
-      .locator(".viz.has-thumb img.thumb")
+      .locator(".track-detail img.thumb")
       .waitFor({ timeout: 5000 })
       .then(() => true)
       .catch(() => false);
@@ -132,14 +132,17 @@ export default async function warroom(t) {
     await sleep(300);
     await shot(wr, "warroom.png");
     await sleep(3500); // the thumb must survive the next getUnits poll (which carries none)
-    check(thumbShown && (await tileA.locator(".viz img.thumb").count()) === 1, "unit thumbnail renders behind the schematic (thermal filter) and persists");
+    check(thumbShown && (await tileA.locator(".track-detail img.thumb").count()) === 1, "live tab capture shows for the locked unit and persists");
 
     // --- Holding tile: operator prompt + answer from the War Room ------------
     const opA = tileA.locator(".operator");
     await opA.waitFor({ timeout: 10000 });
     const opText = await opA.innerText();
     check(/OPERATOR INPUT REQUIRED/.test(opText) && /chaotic production system/i.test(opText), "holding tile shows OPERATOR INPUT REQUIRED with the textarea question");
-    check(/HOLDING \d\d:\d\d/.test(opText), "HOLDING mm:ss timer");
+    check(/HOLD \d\d:\d\d/.test(opText), "HOLD mm:ss timer");
+    check((await wr.locator("#wr-caution").getAttribute("data-lit")) === "true", "master caution lit while a unit waits");
+    await wr.click("#wr-caution");
+    check((await wr.locator(".track.locked .operator").count()) === 1, "master caution jumps to a unit on hold");
     const ta = opA.locator("textarea");
     check((await ta.count()) === 1, "textarea control for a textarea question");
     const answer = "Kept a 400-node Kafka fleet alive through a region failover.";
@@ -151,9 +154,17 @@ export default async function warroom(t) {
     check(!!pageA && (await pageA.evaluate(() => document.getElementById("chaos")?.value)) === answer, "answer filled into the job tab");
 
     // --- Hold-to-fire release --------------------------------------------------
-    const fireA = tileA.locator(".fire-btn");
-    await fireA.waitFor({ timeout: 10000 });
-    check(/RELEASE AUTH REQUIRED/.test(await tileA.locator(".operator").innerText()), "ready tile asks for release authorization");
+    const fireA = tileA.locator(".guard-switch");
+    await tileA.locator(".guard-cover").waitFor({ timeout: 10000 });
+    check(/READY FOR RELEASE/.test(await tileA.locator(".operator").innerText()), "ready row asks for release");
+    await fireA.hover({ force: true });
+    await wr.mouse.down();
+    await sleep(1600);
+    await wr.mouse.up();
+    await sleep(300);
+    check((await store()).jobs.find((j) => j.id === jobA.id)?.status === "ready_to_submit", "holding the switch under a closed guard does nothing");
+    await tileA.locator(".guard-cover").click();
+    check((await tileA.locator(".guarded").getAttribute("data-state")) === "open", "clicking the guard lifts it");
     await fireA.hover();
     await wr.mouse.down();
     await sleep(350);
@@ -170,10 +181,10 @@ export default async function warroom(t) {
     s = await waitFor("A submitted via hold-to-fire", (s) => s.jobs.find((j) => j.id === jobA.id)?.status === "submitted", 15000);
     check(!!s.jobs.find((j) => j.id === jobA.id)?.appliedAt, "hold-to-fire RELEASE submitted the application");
     const delivered = await wr
-      .waitForSelector(`.tile[data-job="${jobA.id}"][data-phase="delivered"]`, { timeout: 6000 })
+      .waitForSelector(`.track[data-job="${jobA.id}"][data-phase="delivered"]`, { timeout: 6000 })
       .then(() => true)
       .catch(() => false);
-    check(delivered, "delivered tile lingers with DELIVERED stamp");
+    check(delivered, "splashed row lingers in the track table");
 
     // --- AFK: consent + keyboard release while away, then sitrep --------------
     await wr.click("#wr-afk");
@@ -181,7 +192,7 @@ export default async function warroom(t) {
     await wr.waitForSelector("#wr-afk-strip:not([hidden])", { timeout: 3000 });
     check((await wr.locator("#wr-afk").getAttribute("aria-pressed")) === "true", "AFK toggle on (strip + pressed)");
 
-    const tileB = wr.locator(`.tile[data-job="${jobB.id}"]`);
+    const tileB = wr.locator(`.track[data-job="${jobB.id}"]`);
     await waitFor("B holding", (s) => s.needs.some((n) => n.jobId === jobB.id), 20000);
     await tileB.locator(".operator").waitFor({ timeout: 5000 });
     await sleep(300);
@@ -194,19 +205,21 @@ export default async function warroom(t) {
     check((await agree.count()) === 1, "consent need shows I AGREE");
     if (await agree.count()) await agree.click();
     await waitFor("B ready", (s) => s.jobs.find((j) => j.id === jobB.id)?.status === "ready_to_submit", 20000);
-    const fireB = tileB.locator(".fire-btn");
-    await fireB.waitFor({ timeout: 10000 });
-    await fireB.focus();
+    const coverB = tileB.locator(".guard-cover");
+    await coverB.waitFor({ timeout: 10000 });
+    await coverB.focus();
+    await wr.keyboard.press("Enter");
+    await sleep(250);
     await wr.keyboard.down("Space");
     await sleep(1500);
     await wr.keyboard.up("Space");
     await waitFor("B submitted via keyboard hold", (s) => s.jobs.find((j) => j.id === jobB.id)?.status === "submitted", 15000);
-    check(true, "keyboard hold (Space) releases too");
+    check(true, "keyboard: Enter lifts the guard, holding Space releases");
 
     await wr.click("#wr-afk");
     await wr.waitForSelector("#wr-modal:not([hidden]) .sr-box", { timeout: 5000 });
     const sitrep = await wr.locator("#wr-modal .sr-box").innerText();
-    const deliveredN = Number((await wr.locator("#wr-modal .sr-cell b").first().innerText()).trim());
+    const deliveredN = Number((await wr.locator("#wr-modal .stage dd").first().innerText()).trim());
     check(/SITREP/.test(sitrep) && deliveredN >= 1, `AFK off shows a sitrep (delivered ${deliveredN})`);
     s = await waitFor("AFK off", (s) => s.settings.afk === false, 5000);
     check(s.ops.some((e) => e.kind === "afk" && /SITREP/.test(e.text)), "sitrep line written to the ops log");
@@ -219,16 +232,28 @@ export default async function warroom(t) {
     check(["launch", "intervene", "release", "deliver", "afk"].every((k) => kinds.includes(k)), `ops log shows live lines (${[...new Set(kinds)].join(",")})`);
     await wr.click("#wr-chips .chip[data-filter=errors]");
     const errKinds = await wr.locator("#wr-log .ln").evaluateAll((els) => els.map((e) => e.dataset.kind));
-    check(errKinds.every((k) => k === "error" || k === "lost"), "log filter chips narrow by kind");
+    check(errKinds.every((k) => k === "error"), "log filter chips narrow by kind");
+    const meta = await wr.locator("#wr-log .ln .ln-meta").first().innerText().catch(() => "");
+    check(/^\d{6}Z/.test(meta.trim()), `log meta line starts with a DTG (${meta.replace(/\s+/g, " ")})`);
     await wr.click("#wr-chips .chip[data-filter=all]");
 
-    // --- Tile click focuses the job tab ----------------------------------------
-    const tileC = wr.locator(`.tile[data-job="${jobC.id}"] .tile-hit`);
+    // --- Map layer (off by default) -------------------------------------------
+    check(await wr.locator("#wr-map-panel").isHidden(), "map layer is off by default");
+    await wr.click("#wr-layer-map");
+    await wr.waitForSelector("#wr-map-panel:not([hidden]) svg", { timeout: 3000 });
+    check(true, "MAP toggle shows the map layer");
+    await sleep(300);
+    await shot(wr, "warroom-map.png");
+    await wr.click("#wr-layer-map");
+    check(await wr.locator("#wr-map-panel").isHidden(), "MAP toggle hides it again");
+
+    // --- Open tab button focuses the job tab ------------------------------------
+    const tileC = wr.locator(`.track[data-job="${jobC.id}"] .c-open`);
     if (await tileC.count()) {
-      await tileC.click();
+      await tileC.click({ force: true });
       await sleep(500);
       const active = await ext.evaluate(() => chrome.tabs.query({ active: true }).then((t) => t.map((x) => x.url)));
-      check(active.some((u) => u.includes("wr=3")), "clicking a tile focuses that job's tab");
+      check(active.some((u) => u.includes("wr=3")), "OPEN TAB focuses that job's tab");
       await wr.bringToFront();
     }
 

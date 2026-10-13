@@ -23,18 +23,13 @@
       <small data-copy="theme.popup.setup.body">Load your resume so units can fill forms.</small>
     </div>
 
-    <div class="stats">
-      <div class="stat crit" id="st-needs"><b id="n-needs">00</b><span data-copy="theme.popup.stat.needs">OPR REQ</span></div>
-      <div class="stat" id="st-running"><b id="n-running">00</b><span data-copy="theme.popup.stat.running">ENGAGED</span></div>
-      <div class="stat" id="st-queued"><b id="n-queued">00</b><span data-copy="theme.popup.stat.queued">TARGETED</span></div>
-      <div class="stat good" id="st-applied"><b id="n-applied">00</b><span data-copy="theme.popup.stat.applied">DELIVERED</span></div>
-    </div>
+    <div id="stages"></div>
 
     <div class="section-label micro" id="holding-label" hidden></div>
     <div id="needs"></div>
 
     <button id="warroom" class="warroom-btn" type="button">
-      <span class="pip hot"></span>
+      <span class="pip" id="wr-lamp"></span>
       <span><span class="t" data-copy="theme.warroom">WAR ROOM</span><span class="s" data-copy="theme.warroom.sub">Live ops: units, comms, ops log</span></span>
       <span class="go" aria-hidden="true">→</span>
     </button>
