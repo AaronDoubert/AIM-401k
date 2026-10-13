@@ -4,7 +4,9 @@ import { copy } from "../shared/copy";
 import { normalizeProfile, normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
 import type { OverlayState } from "../shared/messages";
 import type { Job, NeedKind, Settings } from "../shared/types";
-import { $, applyCopy, h, pad, send, setUi, toast } from "./common";
+import { companyName, dtg } from "../shared/display";
+import { $, applyCopy, h, send, setUi, toast } from "./common";
+import { stageCounts, stageStrip } from "./stages";
 
 let settings: Settings = normalizeSettings(undefined);
 const c = (key: Parameters<typeof copy>[1], vars?: Record<string, string | number>) => copy(settings, key, vars);
@@ -25,11 +27,6 @@ const KIND_CODE: Record<NeedKind, string> = {
   error: "ERR",
 };
 
-function setStat(id: string, n: number): void {
-  $(`#n-${id}`).textContent = pad(n);
-  $(`#st-${id}`).classList.toggle("zero", n === 0);
-}
-
 async function render(): Promise<void> {
   const state = await send<OverlayState>({ type: "getOverlayState" });
   const raw = (await api.storage.local.get([STORAGE_KEYS.jobs, STORAGE_KEYS.profile, STORAGE_KEYS.settings])) as {
@@ -42,21 +39,20 @@ async function render(): Promise<void> {
   applyCopy(settings);
   const p = normalizeProfile(raw.profile);
   $("#setup").style.display = !settings.onboarded && !(p.firstName && p.email) ? "block" : "none";
-  setStat("needs", state.needs.length);
-  setStat("running", state.running);
-  setStat("queued", state.queued);
-  setStat("applied", jobs.filter((j) => j.status === "submitted").length);
+  // Same stage names, order and numbers as the Tracker and the War Room (the first four).
+  $("#stages").replaceChildren(stageStrip(stageCounts(jobs), (k) => c(k), 4));
   $("#pause").textContent = state.paused ? c("theme.resume") : c("theme.pause");
   $("#pause").classList.toggle("primary", state.paused);
   $("#sub").textContent = state.paused ? c("theme.run.paused") : state.running ? c("theme.run.active", { n: state.running }) : c("theme.run.idle");
   $("#pip").className = `pip ${state.paused ? "off" : state.needs.length ? "alert" : state.running ? "" : "off"}`;
-  $("#clock").textContent = new Date().toISOString().slice(11, 16) + "Z";
+  $("#wr-lamp").className = `pip ${state.needs.length ? "alert" : state.running ? "" : "off"}`;
+  $("#clock").textContent = settings.ui.chud ? dtg(Date.now()) : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   $<HTMLInputElement>("#ui-plain").checked = !settings.ui.chud;
   $<HTMLInputElement>("#ui-sound").checked = settings.ui.sound;
 
   const label = $("#holding-label");
   label.hidden = !state.needs.length;
-  label.textContent = c("theme.popup.holding", { n: pad(state.needs.length) });
+  label.textContent = c("theme.popup.holding", { n: state.needs.length });
 
   const list = $("#needs");
   list.replaceChildren();
@@ -64,9 +60,9 @@ async function render(): Promise<void> {
     const job = state.jobs[n.jobId];
     const row = h(
       "button",
-      { type: "button", className: `need ${n.kind === "review_submit" ? "ok" : ""}` },
+      { type: "button", className: `need ${n.kind === "stalled" || n.kind === "error" ? "fault" : ""}` },
       h("span", { className: "code", textContent: KIND_CODE[n.kind] }),
-      h("small", { textContent: job ? [job.company, job.title].filter(Boolean).join(" · ") : "" }),
+      h("small", { textContent: job ? [companyName({ company: job.company, url: "" }), job.title].filter(Boolean).join(" — ") : "" }),
       h("span", { className: "msg", textContent: n.prompt }),
     );
     row.addEventListener("click", () => void send({ type: "focusJob", jobId: n.jobId }).then(() => window.close()));

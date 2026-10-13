@@ -15,8 +15,10 @@ cpSync(join(root, "static"), out, { recursive: true });
 // pdf.js runs in a worker loaded from the extension package.
 cpSync(join(root, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"), join(out, "pdf.worker.min.mjs"));
 
-// Fonts are bundled locally (no CDN): Geist and Geist Mono (variable weight), both OFL.
+// Fonts are bundled locally (no CDN): Geist and Geist Mono (variable weight) and
+// Barlow Condensed (500/600, the DIN-style face for headers and buttons), all OFL.
 const fonts = {
+  "@fontsource/barlow-condensed": ["barlow-condensed-latin-500-normal.woff2", "barlow-condensed-latin-600-normal.woff2"],
   "@fontsource-variable/geist": ["geist-latin-wght-normal.woff2", "geist-latin-ext-wght-normal.woff2"],
   "@fontsource-variable/geist-mono": ["geist-mono-latin-wght-normal.woff2", "geist-mono-latin-ext-wght-normal.woff2"],
 };

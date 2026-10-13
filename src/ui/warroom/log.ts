@@ -1,10 +1,11 @@
-// Ops log terminal: newest at the bottom, autoscroll unless the operator has
-// scrolled up (then a "N NEW" chip offers to jump down), filter chips by kind.
+// Ops log: newest at the bottom, autoscroll unless the operator has scrolled
+// up (then a "N NEW" chip offers to jump down), filter chips by kind. Each entry
+// is one meta line (time · code · target) with the message at full width below.
 import type { CopyKey } from "../../shared/copy";
 import type { OpsEvent } from "../../shared/types";
 import { h } from "../common";
 import { LOG_FILTERS, logLine, type LogFilter, matchesFilter, mergeOps } from "./model";
-import type { T } from "./tiles";
+import type { T } from "./tracks";
 
 const CAP = 300;
 
@@ -19,6 +20,8 @@ export class OpsLog {
     private readonly chips: HTMLElement,
     private readonly jump: HTMLButtonElement,
     private readonly t: () => T,
+    /** Copy mode, and the TGT label for a job id ("" when unknown). */
+    private readonly ctx: () => { chud: boolean; tgt: (jobId: string) => string },
   ) {
     for (const f of LOG_FILTERS) {
       const b = h("button", { type: "button", className: "chip" });
@@ -107,14 +110,17 @@ export class OpsLog {
   }
 
   private line(e: OpsEvent): HTMLElement {
-    const l = logLine(e);
-    const el = h(
+    const { chud, tgt } = this.ctx();
+    const l = logLine(e, chud);
+    const meta = h(
       "div",
-      { className: `ln tone-${l.tone}` },
+      { className: "ln-meta" },
       h("time", { textContent: l.time, dateTime: new Date(e.t).toISOString() }),
       h("b", { className: "k", textContent: this.t()(`warroom.kind.${l.kind}` as CopyKey) }),
-      h("span", { className: "tx", textContent: l.text }),
     );
+    const target = e.jobId ? tgt(e.jobId) : "";
+    if (target) meta.append(h("span", { className: "tgt", textContent: target }));
+    const el = h("div", { className: `ln tone-${l.tone}` }, meta, h("div", { className: "tx", textContent: l.text }));
     el.dataset.kind = e.kind;
     el.dataset.id = e.id;
     return el;

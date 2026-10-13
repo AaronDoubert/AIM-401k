@@ -35,6 +35,8 @@ When that happens, a small box appears in the corner of whatever tab you're on. 
 
 > [!NOTE]
 > The interface is styled as a tongue-in-cheek defense-tech HUD ("Engage this tab", "War Room"). Turn on **Plain mode** in the popup or in Settings and every label switches to ordinary wording. This README uses the plain names.
+>
+> The themed names follow one fixed glossary, used the same way in every view: **Target** = a job posting, **Engaged** = being filled in, **Hold** = waiting on you, **Release** = submit, **Splash** = submitted, **Contact** = a recruiter replied, **Secured** = an offer, **Lost** = closed.
 
 ## Install
 
@@ -82,15 +84,15 @@ Queued jobs open in background tabs, a few at a time. You can change how many in
 
 ### Answer when it asks
 
-The box in the corner shows everything waiting on you. Type an answer, tick a consent, or sign. Finished applications wait for your review: open the tab and check the form, then **press and hold** the submit button in the box to send it. Holding (rather than clicking) prevents accidental submissions.
+The box in the corner shows everything waiting on you. Type an answer, tick a consent, or sign. Finished applications wait for your review: open the tab and check the form, then **lift the guard** on the submit switch and **press and hold** it to send. Two deliberate actions (rather than one click) prevent accidental submissions.
 
 ### Keep track
 
 | Where | What you get |
 |---|---|
-| **Popup** | Counts at a glance, items waiting on you, quick actions, and the Plain mode and Sound switches. |
-| **Tracker** | Every application in a table or a board (Queued → Applying → Needs you → Applied → Interviewing → Offer, plus Closed). Search, notes, CSV and Excel export, spreadsheet import, and the inbox feed. Drag cards between columns to change status. |
-| **Live dashboard** | A full-screen view for when you step away: a live tile for each tab being filled, an activity log, totals, and an away mode that collects questions and gives you a summary when you're back. |
+| **Popup** | The first four stages at a glance, items waiting on you, quick actions, and the Plain mode and Sound switches. |
+| **Tracker** | Every application in a table or a board (Queued → Applying → Needs you → Applied → Interviewing → Offer, plus Closed). Search, notes, CSV and Excel export, spreadsheet import, and the inbox feed. Drag cards between columns to change status. Empty columns shrink to a thin rail. |
+| **Live dashboard** | A full-screen view for when you step away: a table with one row per tab being filled (with a checklist of which fields are done, AI-drafted or waiting on you), the same stage totals as the Tracker, an activity log, and an away mode that collects questions and gives you a summary when you're back. A **Needs you** light in the header turns amber when anything is waiting; click it to jump between those jobs. **Map** shows an optional map of where your jobs are (US only, drawn offline). |
 | **Settings** | Your profile, experience, saved answers, automation rules, AI helper, inbox, privacy and backup. |
 
 On the page itself, fields are outlined as they're filled: **green** came from your profile or saved answers, **dashed amber** was drafted by AI and is worth reviewing, and **pulsing red** needs you.

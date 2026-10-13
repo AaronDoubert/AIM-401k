@@ -28,17 +28,16 @@ describe("board columns", () => {
     for (const s of ALL) expect(BOARD_COLUMNS.filter((c) => c.statuses.includes(s)).length, s).toBe(1);
   });
 
-  it("follows the pipeline order with LOST collapsed last", () => {
-    expect(BOARD_COLUMNS.map((c) => c.id)).toEqual(["targeted", "engaged", "holding", "delivered", "contact", "secured", "lost"]);
-    expect(BOARD_COLUMNS.at(-1)?.collapsed).toBe(true);
-    expect(columnFor("ready_to_submit")).toBe("holding");
+  it("follows the shared stage order, LOST last", () => {
+    expect(BOARD_COLUMNS.map((c) => c.id)).toEqual(["targets", "engaged", "hold", "splash", "contact", "secured", "lost"]);
+    expect(columnFor("ready_to_submit")).toBe("hold");
     expect(columnFor("failed")).toBe("lost");
   });
 
   it("groups jobs, newest update first", () => {
     const g = groupForBoard([job("a", "queued", 0, 1), job("b", "saved", 0, 5), job("c", "submitted"), job("d", "skipped")]);
-    expect(g.targeted.map((j) => j.id)).toEqual(["b", "a"]);
-    expect(g.delivered.map((j) => j.id)).toEqual(["c"]);
+    expect(g.targets.map((j) => j.id)).toEqual(["b", "a"]);
+    expect(g.splash.map((j) => j.id)).toEqual(["c"]);
     expect(g.lost.map((j) => j.id)).toEqual(["d"]);
     expect(Object.values(g).flat()).toHaveLength(4);
   });
@@ -47,10 +46,10 @@ describe("board columns", () => {
     expect(dropStatus(job("a", "submitted"), "contact")).toBe("interviewing");
     expect(dropStatus(job("a", "interviewing"), "secured")).toBe("offer");
     expect(dropStatus(job("a", "submitted"), "lost")).toBe("rejected");
-    expect(dropStatus(job("a", "queued"), "targeted")).toBeNull(); // already there
+    expect(dropStatus(job("a", "queued"), "targets")).toBeNull(); // already there
     expect(dropStatus(job("a", "skipped"), "lost")).toBeNull();
     expect(dropStatus(job("a", "saved"), "engaged")).toBeNull(); // runtime state, not draggable into
-    expect(dropStatus(job("a", "submitted"), "holding")).toBeNull();
+    expect(dropStatus(job("a", "submitted"), "hold")).toBeNull();
   });
 
   it("numbers call signs by creation time", () => {

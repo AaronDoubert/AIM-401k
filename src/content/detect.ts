@@ -1,3 +1,4 @@
+import { isLocalOrIpHost } from "../shared/display";
 import type { PageMeta } from "../shared/types";
 import { truncate } from "../shared/util";
 import { isVisible, queryAll, textOf } from "./dom";
@@ -50,6 +51,38 @@ function companyFromUrl(ats: string): string {
   }
 }
 
+const GENERIC_WORD = /^(careers?|jobs?|home|apply|application|job (opening|application|details?)|openings?|work with us|join us|hiring)$/i;
+
+/**
+ * Company out of a page title: "Backend Engineer at Initech", "Backend Engineer - Initech",
+ * "Initech | Careers", "Careers at Initech", "Jobs – Initech". "" when nothing plausible.
+ */
+export function companyFromTitle(title: string): string {
+  const t = title.replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  const ok = (c: string) => {
+    const s = c.trim().replace(/\s+(careers|jobs)$/i, "");
+    return s.length >= 2 && s.length <= 60 && !GENERIC_WORD.test(s) && !isLocalOrIpHost(s) ? s : "";
+  };
+  const at = t.match(/\s(?:at|@)\s+([^|\-–—]+?)\s*(?:[|\-–—].*)?$/i);
+  if (at) {
+    const c = ok(at[1]!);
+    if (c) return c;
+  }
+  const parts = t.split(/\s+[|\-–—·]\s+/).map((x) => x.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const [first, ...rest] = parts;
+    const last = rest[rest.length - 1]!;
+    // "Initech | Careers": a generic tail means the head is the company.
+    if (GENERIC_WORD.test(last) || /^careers?\b/i.test(last)) return ok(first!);
+    // "Jobs – Initech": a generic head means the tail is the company.
+    if (GENERIC_WORD.test(first!)) return ok(last);
+    // "Backend Engineer - Initech": the last segment names the company.
+    return ok(last);
+  }
+  return "";
+}
+
 export function extractMeta(): PageMeta {
   const ats = detectAts();
   const h1 = textOf(document.querySelector("h1"));
@@ -60,12 +93,19 @@ export function extractMeta(): PageMeta {
     document.querySelector<HTMLImageElement>(".main-header-logo img, header img[alt]")?.alt?.replace(/ logo$/i, "") ||
     companyFromUrl(ats) ||
     metaContent("og:site_name") ||
-    location.hostname.replace(/^www\./, "");
+    hostCompany();
   const location_ =
     textOf(document.querySelector(".location, .posting-categories .location, [data-automation-id=locations], .job__location")) || "";
   const main = document.querySelector<HTMLElement>("main, article, #content, .content, [role=main]") ?? document.body;
   const description = truncate(visibleText(main), 8000);
   return { title, company: truncate(company, 80), location: truncate(location_, 80), ats, description };
+}
+
+/** Fallback company: the site's host, but never an IP address or localhost. */
+function hostCompany(): string {
+  const host = location.hostname.replace(/^www\./, "");
+  if (!isLocalOrIpHost(host)) return host;
+  return companyFromTitle(document.title) || "Localhost";
 }
 
 /** Rendered text only (innerText skips <script>/<style> and hidden nodes). */
