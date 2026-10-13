@@ -424,3 +424,11 @@ body.wr {
 @media (prefers-reduced-motion: reduce) {
   .wr *, .wr *::before, .wr *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---- shared-stylesheet leaks: styles.css defines .log and .need for the Tracker and popup ---- */
+.wr .log { font-family: var(--wr-sans); font-size: 13px; color: var(--wr-fg-2); max-width: none; padding: 0; border-top: 0; }
+.wr .need { display: flex; flex-direction: column; gap: 7px; width: auto; min-height: 0; padding: 0; border: 0; background: none; text-align: left; cursor: default; font: 13px/1.4 var(--wr-sans); color: var(--wr-bone); }
+.wr .need:hover { background: none; }
+.wr .need + .need { padding-top: 10px; border-top: 1px solid var(--wr-line); }
+.wr-totals { border-bottom: 1px solid var(--wr-line); }
+.wr-totals .stages { border-bottom: 0; }

@@ -22,7 +22,7 @@ export interface MapCopy {
 const SVG_NS = "http://www.w3.org/2000/svg";
 /** When several jobs share a place, the loudest tone wins. */
 const TONE_RANK: Tone[] = ["alert", "warn", "advisory", "ok", "status", "dim"];
-const R = 4.5;
+const R = 10;
 const RETICLE = 10;
 const RETICLE_ARM = 4;
 

@@ -48,15 +48,20 @@ export default async function ({ ctx, ext, extId, base, msg, store, check, sleep
 
   // Drag a delivered card to CONTACT → updateJob(status: interviewing).
   // (Stepped mouse moves: Chromium needs intermediate moves to start an HTML5 drag.)
-  await page.locator(`.bcard[data-job-id="${done.id}"]`).scrollIntoViewIfNeeded();
-  const from = await page.locator(`.bcard[data-job-id="${done.id}"] .top`).boundingBox();
-  await page.mouse.move(from.x + 5, from.y + 5);
-  await page.mouse.down();
-  await page.mouse.move(from.x + 30, from.y + 30, { steps: 5 });
-  // Rails widen into drop targets once a drag starts: measure the target after that.
-  const to = await page.locator(`.bcol[data-col="contact"]`).boundingBox({ timeout: 3000 });
-  await page.mouse.move(to.x + to.width / 2, to.y + 60, { steps: 10 });
-  await page.mouse.up();
+  // Put the whole board on screen first: a drag that ends outside the viewport never completes.
+  await page.locator("#board").evaluate((e) => e.scrollIntoView({ block: "start" }));
+  const drag = async () => {
+    const from = await page.locator(`.bcard[data-job-id="${done.id}"] .top`).boundingBox();
+    await page.mouse.move(from.x + 5, from.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 30, from.y + 30, { steps: 5 });
+    // Rails widen into drop targets once a drag starts: measure the target after that.
+    const to = await page.locator(`.bcol[data-col="contact"]`).boundingBox({ timeout: 3000 });
+    await page.mouse.move(to.x + to.width / 2, to.y + Math.min(60, to.height / 2), { steps: 10 });
+    await page.mouse.up();
+  };
+  // Never let a stuck drag stall the whole run.
+  await Promise.race([drag(), sleep(15000).then(() => console.log("   (drag timed out)"))]).catch((e) => console.log("   (drag failed)", e.message));
   let moved = false;
   for (let i = 0; i < 20 && !moved; i++) {
     await sleep(200);
