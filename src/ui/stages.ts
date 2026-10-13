@@ -6,7 +6,7 @@ import type { Job, JobStatus } from "../shared/types";
 
 export type StageId = "targets" | "engaged" | "hold" | "splash" | "contact" | "secured" | "lost";
 
-/** Color doctrine: ok green = normal · warn amber = needs you · advisory cyan · status white · dim grey. */
+/** Color doctrine: amber = needs you · cyan advisory · white status · grey closed. Green is kept for the win (an offer). */
 export type StageTone = "status" | "ok" | "warn" | "advisory" | "dim";
 
 export interface Stage {
@@ -18,7 +18,7 @@ export interface Stage {
 
 export const STAGES: Stage[] = [
   { id: "targets", title: "stage.targets", statuses: ["saved", "queued"], tone: "status" },
-  { id: "engaged", title: "stage.engaged", statuses: ["running"], tone: "ok" },
+  { id: "engaged", title: "stage.engaged", statuses: ["running"], tone: "status" },
   { id: "hold", title: "stage.hold", statuses: ["needs_you", "ready_to_submit"], tone: "warn" },
   { id: "splash", title: "stage.splash", statuses: ["submitted"], tone: "status" },
   { id: "contact", title: "stage.contact", statuses: ["interviewing"], tone: "advisory" },
