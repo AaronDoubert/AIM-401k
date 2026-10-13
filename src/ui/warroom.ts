@@ -104,9 +104,10 @@ const usMap = new UsMap(() => ({
   remote: (n) => t("warroom.map.remote", { n }),
   unplaced: (n) => t("warroom.map.unplaced", { n }),
   empty: t("warroom.map.empty"),
+  stage: (id) => t(`stage.${id}` as CopyKey),
 }));
 el.map.append(usMap.el);
-usMap.onSelect = (jobId) => select(jobId, true);
+usMap.onFilter = (ids) => { if (ids?.length) select(ids[0] as string, true); }; // TEMP: real table filter pending
 
 // ---------------------------------------------------------------------------
 // copy (static labels carry data-copy="warroom.key")
@@ -228,15 +229,14 @@ function renderTotals(): void {
   el.rankNext.textContent = r.next == null ? t("warroom.rank.max") : t("warroom.rank.next", { n: r.toNext, rank: t(`warroom.rank.${r.next}` as CopyKey) });
 }
 
-const STAGE_TONE = Object.fromEntries(STAGES.map((s) => [s.id, s.tone])) as Record<string, MapPoint["tone"]>;
 function renderMap(): void {
   usMap.update(
     jobs.map((j) => ({
       jobId: j.id,
       label: [companyName(j), j.title].filter(Boolean).join(" — ") || j.url,
       location: j.location,
-      tone: j.status === "failed" ? "alert" : STAGE_TONE[stageOf(j.status)] ?? "status",
-      queued: j.status === "queued" || j.status === "saved",
+      stage: stageOf(j.status),
+      failed: j.status === "failed",
     })),
   );
   usMap.select(selected);
