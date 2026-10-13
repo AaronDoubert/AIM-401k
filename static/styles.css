@@ -585,7 +585,7 @@ details summary::marker { color: var(--accent); }
 .bcol.rail .cards { display: none; }
 .bcol.rail.toggle { cursor: pointer; }
 .bcol.rail.toggle:hover > header .t { color: var(--fg); }
-.bcol.rail.dragging { flex-basis: 120px; }
+.bcol.rail.dragging:not(.nodrop) { background: var(--accent-soft); }
 .bcard { position: relative; border: 1px solid var(--line); background: var(--panel); padding: 10px 11px; cursor: grab; transition: border-color 0.12s; min-width: 0; }
 .bcard:hover, .bcard:focus-visible { border-color: var(--bracket); }
 .bcard.dragging { opacity: 0.4; }
