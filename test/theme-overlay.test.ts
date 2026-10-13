@@ -30,7 +30,10 @@ const state = (chud: boolean): OverlayState => ({
 });
 
 const root = () => document.getElementById("aim401k-root")!.shadowRoot!;
-const hold = () => root().querySelector<HTMLButtonElement>("button.hold")!;
+const hold = () => root().querySelector<HTMLButtonElement>("button.guard-switch")!;
+const cover = () => root().querySelector<HTMLButtonElement>("button.guard-cover")!;
+const lift = () => cover().click();
+const gstate = () => root().querySelector(".guarded")!.getAttribute("data-state");
 const key = (type: "keydown" | "keyup", k = " ") => hold().dispatchEvent(new KeyboardEvent(type, { key: k, bubbles: true, cancelable: true }));
 const submits = () => sendMessage.mock.calls.filter(([m]) => (m as { type: string }).type === "submitJob");
 
@@ -48,14 +51,21 @@ describe("overlay hold-to-release", () => {
     expect(root().textContent).toContain("OPERATOR INPUT REQUIRED");
     expect(root().querySelectorAll("svg.mark").length).toBeGreaterThan(0); // the supplied mark, not a typed logo
     expect(root().textContent).toContain("TGT · Acme Robotics · Platform Eng");
+    expect(cover().textContent).toContain("LIFT GUARD");
     expect(hold().textContent).toContain("HOLD TO RELEASE");
+    expect(root().querySelector(".brk")).toBeNull();
     o.update(state(false));
     expect(root().textContent).toContain("Needs your input");
+    expect(cover().textContent).toContain("Unlock submit");
     expect(hold().textContent).toContain("Hold to submit");
   });
 
-  it("fires only after the full hold", () => {
+  it("fires only after lift then the full hold (chud)", () => {
     new Overlay().update(state(true));
+    key("keydown"); // still guarded: ignored
+    vi.advanceTimersByTime(HOLD_MS + 10);
+    expect(submits()).toHaveLength(0);
+    lift();
     key("keydown");
     vi.advanceTimersByTime(HOLD_MS - 100);
     expect(submits()).toHaveLength(0);
@@ -65,10 +75,19 @@ describe("overlay hold-to-release", () => {
     expect(submits()).toHaveLength(1);
   });
 
+  it("lift then hold in plain mode", () => {
+    new Overlay().update(state(false));
+    lift();
+    key("keydown");
+    vi.advanceTimersByTime(HOLD_MS + 10);
+    expect(submits()).toHaveLength(1);
+  });
+
   it("works with a pointer too", () => {
     new Overlay().update(state(true));
+    lift();
     hold().dispatchEvent(new PointerEvent("pointerdown", { button: 0, bubbles: true, cancelable: true }));
-    expect(hold().classList.contains("arming")).toBe(true);
+    expect(gstate()).toBe("arming");
     expect(hold().textContent).toContain("RELEASING");
     vi.advanceTimersByTime(HOLD_MS + 10);
     expect(submits()).toHaveLength(1);
@@ -76,6 +95,7 @@ describe("overlay hold-to-release", () => {
 
   it("early release cancels; a plain click does nothing", () => {
     new Overlay().update(state(true));
+    lift();
     key("keydown", "Enter");
     vi.advanceTimersByTime(HOLD_MS / 2);
     key("keyup", "Enter");
@@ -83,12 +103,13 @@ describe("overlay hold-to-release", () => {
     hold().click();
     vi.advanceTimersByTime(HOLD_MS * 2);
     expect(submits()).toHaveLength(0);
-    expect(hold().classList.contains("arming")).toBe(false);
+    expect(gstate()).toBe("open");
   });
 
   it("does not re-render under the user's finger", () => {
     const o = new Overlay();
     o.update(state(true));
+    lift();
     const btn = hold();
     key("keydown");
     o.update({ ...state(true), running: 1 });
