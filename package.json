@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "e2e": "node scripts/e2e.mjs",
     "demo": "node scripts/demo.mjs",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "teaser": "node promo/teaser/render.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
