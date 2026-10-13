@@ -233,9 +233,9 @@ export default async function warroom(t) {
     await wr.click("#wr-chips .chip[data-filter=errors]");
     const errKinds = await wr.locator("#wr-log .ln").evaluateAll((els) => els.map((e) => e.dataset.kind));
     check(errKinds.every((k) => k === "error"), "log filter chips narrow by kind");
+    await wr.click("#wr-chips .chip[data-filter=all]");
     const meta = await wr.locator("#wr-log .ln .ln-meta").first().innerText().catch(() => "");
     check(/^\d{6}Z/.test(meta.trim()), `log meta line starts with a DTG (${meta.replace(/\s+/g, " ")})`);
-    await wr.click("#wr-chips .chip[data-filter=all]");
 
     // --- Map layer (off by default) -------------------------------------------
     check(await wr.locator("#wr-map-panel").isHidden(), "map layer is off by default");
