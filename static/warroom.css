@@ -75,7 +75,6 @@ body.wr {
 .wr .wr-btn.link { border-color: transparent; color: var(--wr-dim); padding: 0 4px; }
 .wr .wr-btn.link:hover { color: var(--wr-bone); background: none; text-decoration: underline; text-underline-offset: 3px; }
 .wr .wr-btn.toggle[aria-pressed="true"] { border-color: var(--wr-bone); background: rgba(241, 237, 228, 0.08); }
-#wr-pause[aria-pressed="true"] { border-color: var(--wr-warn); color: var(--wr-warn); }
 
 .wr .wr-input {
   width: 100%;
@@ -117,60 +116,96 @@ body.wr {
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .wr .brand .wordmark { height: 20px; width: auto; flex: none; display: block; }
 .brand-text { min-width: 0; padding-left: 12px; border-left: 1px solid var(--wr-line-2); }
-.wr-head h1 { margin: 0; font: 600 17px/1.1 var(--wr-head); letter-spacing: 0.06em; white-space: nowrap; }
+.wr-head h1 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 17px/1.1 var(--wr-head); letter-spacing: 0.06em; white-space: nowrap; }
+
+/* Rank insignia beside the operation name (chud mode only). One moment on promotion. */
+.insignia { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; width: 16px; color: var(--wr-bone); cursor: help; }
+[data-mode="plain"] .insignia { display: none; }
+.ins.dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+.ins.chev { width: 11px; height: 5px; border: 2px solid currentColor; border-bottom: 0; border-right: 0; transform: rotate(45deg) translate(1px, 1px); margin: -1px 0; }
+.ins.bar { width: 13px; height: 3px; background: currentColor; }
+.ins.star { width: 7px; height: 7px; background: currentColor; clip-path: polygon(50% 0, 61% 38%, 100% 38%, 69% 61%, 80% 100%, 50% 76%, 20% 100%, 31% 61%, 0 38%, 39% 38%); }
+.insignia.promoted { animation: wr-promote 1.6s ease-out; }
+@keyframes wr-promote { 0% { transform: scale(2.2); color: var(--wr-ok); } 60% { transform: scale(1); color: var(--wr-ok); } }
 [data-mode="plain"] .wr-head h1 { letter-spacing: 0.01em; }
 .clock { display: block; margin-top: 2px; font: 11px/1.2 var(--wr-mono); letter-spacing: 0.06em; color: var(--wr-muted); }
 
 .status { display: flex; align-items: center; gap: 12px; }
 .lamp { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1 var(--wr-head); letter-spacing: 0.06em; color: var(--wr-fg-2); white-space: nowrap; }
 .lamp::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--wr-ok); }
-.lamp[data-state="paused"]::before, .lamp.afk::before { background: var(--wr-warn); }
+.lamp[data-state="paused"]::before, .lamp.afk::before { background: var(--wr-muted); }
 .lamp[data-state="down"] { color: var(--wr-alert); }
 .lamp[data-state="down"]::before { background: var(--wr-alert); }
-.lamp.afk { color: var(--wr-warn); }
+.lamp.afk { color: var(--wr-fg-2); }
 
-/* Master caution annunciator: dark until something waits on you, then steady
-   amber. Clicking it cycles through the units on hold. */
+/* Master caution: dark with grey text until a new hold arrives; then it flashes and
+   stays lit amber. Pressing it acknowledges (dark again) while the rows stay amber. */
 .wr .caution {
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-width: 132px;
-  height: 38px;
+  gap: 10px;
+  height: 34px;
   padding: 0 12px;
   border-radius: 0;
-  border: 1px solid #3a3121;
-  background: #15130e;
-  color: #5d5136;
-  cursor: default;
-  font: 600 13px/1 var(--wr-head);
+  border: 1px solid #2c2a26;
+  background: #12110f;
+  color: #4d4a44;
+  cursor: pointer;
+  font: 600 14px/1 var(--wr-head);
   letter-spacing: 0.1em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
-.wr .caution .c-n { font: 10px/1 var(--wr-mono); letter-spacing: 0.06em; margin-top: 3px; }
-.wr .caution .c-n:empty { display: none; }
-.wr .caution[data-lit="true"] { background: var(--wr-warn); border-color: var(--wr-warn); color: #17130a; cursor: pointer; box-shadow: 0 0 18px rgba(220, 174, 94, 0.25); }
-.wr .caution[data-lit="true"]:hover { background: #e7bd72; }
-.wr .caution.flash { animation: wr-caution 0.5s steps(1) 3; }
-@keyframes wr-caution { 50% { background: #15130e; color: var(--wr-warn); } }
+.wr .caution:hover { color: #6b675f; }
+.wr .caution[data-lit="true"] { background: var(--wr-warn); border-color: #f0c57a; color: #17130a; box-shadow: 0 0 22px rgba(220, 174, 94, 0.3); }
+.wr .caution[data-lit="true"] kbd { color: #4a3a14; border-color: rgba(23, 19, 10, 0.35); }
+.wr .caution.flash { animation: wr-caution 0.36s steps(1) 5; }
+@keyframes wr-caution { 50% { background: #12110f; color: var(--wr-warn); } }
 
-.ctl { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.stepper { display: flex; align-items: center; height: 30px; border: 1px solid var(--wr-line-2); }
-.stepper .lbl { font: 600 13px var(--wr-head); letter-spacing: 0.05em; color: var(--wr-muted); padding: 0 8px 0 10px; }
-.stepper .wr-btn.step { border: 0; border-left: 1px solid var(--wr-line-2); height: 28px; width: 28px; padding: 0; font: 15px/1 var(--wr-mono); }
-.stepper output { min-width: 26px; text-align: center; font: 600 13px var(--wr-mono); border-left: 1px solid var(--wr-line-2); line-height: 28px; }
+/* Key hints: small mono, everywhere a key does something. */
+.wr kbd { display: inline-block; min-width: 1.5em; padding: 1px 4px; font: 500 9.5px/1.3 var(--wr-mono); letter-spacing: 0; text-align: center; color: var(--wr-dim); border: 1px solid var(--wr-line-2); border-radius: 2px; text-transform: none; }
 
-.afk-strip { flex: none; text-align: center; padding: 4px 12px; font: 600 13px/1.2 var(--wr-head); letter-spacing: 0.06em; color: #17130a; background: var(--wr-warn); }
+.ctl { margin-left: auto; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Annunciator toggles: a label with a lamp that lights when on. */
+.annunciators { display: flex; gap: 2px; }
+.wr .ann { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 0; border-radius: 0; background: none; color: var(--wr-muted); font: 600 13px/1 var(--wr-head); letter-spacing: 0.07em; cursor: pointer; }
+.wr .ann:hover { color: var(--wr-bone); background: none; }
+.wr .ann i { width: 7px; height: 7px; border-radius: 50%; background: #2f2d29; box-shadow: inset 0 0 0 1px #3d3a35; }
+.wr .ann[aria-pressed="true"] { color: var(--wr-bone); }
+.wr .ann[aria-pressed="true"] i { background: var(--wr-bone); box-shadow: 0 0 6px rgba(241, 237, 228, 0.5); }
+#wr-afk[aria-pressed="true"] i { background: var(--wr-warn); box-shadow: 0 0 6px rgba(220, 174, 94, 0.6); }
+
+.stepper { display: flex; align-items: center; height: 28px; border: 1px solid var(--wr-line-2); }
+.stepper .lbl { font: 600 12.5px var(--wr-head); letter-spacing: 0.06em; color: var(--wr-muted); padding: 0 8px 0 9px; }
+.stepper .wr-btn.step { border: 0; border-left: 1px solid var(--wr-line-2); height: 26px; width: 26px; padding: 0; font: 14px/1 var(--wr-mono); }
+.stepper output { min-width: 24px; text-align: center; font: 600 12px var(--wr-mono); border-left: 1px solid var(--wr-line-2); line-height: 26px; }
+
+/* Pause is the hold-fire control: the one heavy button in the header. */
+.wr .pause-btn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border: 2px solid var(--wr-bone); border-radius: 0; background: #1b1a17; color: var(--wr-bone); font: 600 15px/1 var(--wr-head); letter-spacing: 0.1em; cursor: pointer; }
+.wr .pause-btn:hover { background: #262420; }
+.wr .pause-btn[aria-pressed="true"] { background: var(--wr-bone); color: #0c0c0b; }
+.wr .pause-btn[aria-pressed="true"] kbd { color: #4d4a44; border-color: rgba(12, 12, 11, 0.3); }
+
+/* Overflow menu: full screen and the key list. */
+.menu { position: relative; }
+.menu summary { list-style: none; cursor: pointer; width: 28px; height: 28px; display: grid; place-items: center; color: var(--wr-muted); font: 600 16px/1 var(--wr-sans); }
+.menu summary::-webkit-details-marker { display: none; }
+.menu summary:hover, .menu[open] summary { color: var(--wr-bone); }
+.menu-list { position: absolute; right: 0; top: 34px; z-index: 20; width: 300px; padding: 10px 12px; background: var(--wr-panel); border: 1px solid var(--wr-line-2); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+.wr .menu-item { width: 100%; height: 30px; text-align: left; justify-content: flex-start; padding: 0 6px; border: 0; background: none; color: var(--wr-bone); font: 600 14px var(--wr-head); letter-spacing: 0.05em; }
+.wr .menu-item:hover { background: rgba(241, 237, 228, 0.06); }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--wr-line); font-size: 12px; color: var(--wr-muted); }
+.keys dt { font: 11px var(--wr-mono); color: var(--wr-bone); }
+.keys dd { margin: 0; }
+
+.afk-strip { flex: none; text-align: center; padding: 4px 12px; font: 600 13px/1.2 var(--wr-head); letter-spacing: 0.06em; color: var(--wr-bone); background: #1d1c19; border-bottom: 1px solid var(--wr-line-2); }
 
 /* ---- totals: the shared stage strip ------------------------------------------ */
 
 .wr-totals { flex: none; display: flex; align-items: flex-end; gap: 24px; padding: 0 16px; }
+.wr .stage dt { font-size: 12px; color: var(--wr-dim); }
 .wr-totals .stages { flex: 1; border-top: 0; padding: 9px 0 10px; }
 .wr .stage dd { font-size: 22px; }
-.rank { flex: none; padding-bottom: 12px; font: 11px var(--wr-mono); color: var(--wr-muted); white-space: nowrap; }
-.rank .lbl { font: 600 13px var(--wr-head); letter-spacing: 0.05em; }
-.rank b { color: var(--wr-bone); font-weight: 500; }
-.rank small { color: var(--wr-dim); font-size: 11px; margin-left: 6px; }
 
 /* ---- grid ------------------------------------------------------------------- */
 
@@ -187,16 +222,23 @@ body.wr {
 .side-sec + .side-sec { border-top: 1px solid var(--wr-line); }
 
 .sec-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; min-width: 0; }
-.sec-head h2 { margin: 0; font: 600 14px/1.2 var(--wr-head); letter-spacing: 0.07em; color: var(--wr-muted); white-space: nowrap; }
+.sec-head h2 { margin: 0; font: 600 17px/1.2 var(--wr-head); letter-spacing: 0.06em; color: var(--wr-bone); white-space: nowrap; }
+.filter-chip { height: 22px; min-height: 0; padding: 0 8px; border: 1px solid var(--wr-line-2); border-radius: 0; background: none; color: var(--wr-fg-2); font: 11px var(--wr-mono); cursor: pointer; }
+.filter-chip:hover { border-color: var(--wr-muted); background: none; }
+.filter { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.wr .filter input { width: 170px; height: 26px; padding: 0 8px; font: 12.5px var(--wr-sans); color: var(--wr-bone); background: transparent; border: 1px solid var(--wr-line-2); border-radius: 0; }
+.wr .filter input:focus { outline: none; border-color: var(--wr-muted); box-shadow: none; }
 .sec-head h2 label { cursor: pointer; }
 .meta { margin-left: auto; font: 11px/1.2 var(--wr-mono); color: var(--wr-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- track table ------------------------------------------------------------ */
 
-.tracks { --cols: 74px 74px minmax(0, 1fr) 96px 104px 52px 82px; }
-[data-mode="plain"] .tracks { --cols: 40px 60px minmax(0, 1fr) 120px 104px 52px 82px; }
+/* Data columns are fixed; the target takes what's left (and no more than it needs on wide screens). */
+.tracks { --cols: 72px 76px minmax(220px, 1fr) 104px 72px 60px 78px; max-width: 1180px; }
+[data-mode="plain"] .tracks { --cols: 40px 60px minmax(220px, 1fr) 128px 72px 60px 78px; }
 .track-head, .track-row { display: grid; grid-template-columns: var(--cols); gap: 12px; align-items: center; padding: 0 8px; }
-.track-head { height: 26px; font: 600 12.5px var(--wr-head); letter-spacing: 0.06em; color: var(--wr-dim); border-bottom: 1px solid var(--wr-line-2); }
+.track-head { height: 24px; font: 600 11px var(--wr-head); letter-spacing: 0.08em; color: var(--wr-dim); border-bottom: 1px solid var(--wr-line-2); }
+.track-head .num, .c-fields, .c-hold { text-align: right; }
 
 .track { --tone: var(--wr-bone); --bc: var(--wr-bone); --bk: 9px; position: relative; border-bottom: 1px solid var(--wr-line); }
 .track-row { min-height: 40px; cursor: pointer; outline: none; }
@@ -208,20 +250,16 @@ body.wr {
 .c-co { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
 .c-role { color: var(--wr-muted); overflow: hidden; text-overflow: ellipsis; flex: 1 1 0; }
 .c-status { font: 500 11.5px var(--wr-mono); letter-spacing: 0.05em; color: var(--tone); white-space: nowrap; }
-.c-fields { display: flex; flex-direction: column; gap: 4px; }
-.c-fields .bar { display: block; height: 2px; background: var(--wr-line-2); }
-.c-fields .bar b { display: block; height: 100%; background: var(--tone); transition: width 0.4s; }
-.c-fields-n { font: 11px var(--wr-mono); color: var(--wr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.c-hold { font: 12px var(--wr-mono); color: var(--wr-warn); }
+.c-fields { font: 12px var(--wr-mono); color: var(--wr-fg-2); white-space: nowrap; }
+.c-hold { font: 12px var(--wr-mono); color: var(--wr-fg-2); }
 .wr .c-open { height: 26px; padding: 0 8px; font-size: 12.5px; justify-self: end; opacity: 0; }
 .track-row:hover .c-open, .track-row:focus-within .c-open, .track.locked .c-open { opacity: 1; }
 
-/* Phases. Engaged is normal (green); waiting on you is amber; splash is plain
-   status white; a failure is red; skipped/rejected go quiet. */
-.track[data-phase="filling"], .track[data-phase="advancing"] { --tone: var(--wr-ok); }
+/* Phases. The status cell is the one amber element in a row on hold; engaged is
+   plain status white (green is kept for an offer); a failure is red; closed goes quiet. */
+.track[data-phase="filling"], .track[data-phase="advancing"], .track[data-phase="delivered"] { --tone: var(--wr-bone); }
 .track[data-phase="opening"], .track[data-phase="recon"], .track[data-phase="releasing"] { --tone: var(--wr-fg-2); }
 .track[data-phase="holding"] { --tone: var(--wr-warn); }
-.track[data-phase="delivered"] { --tone: var(--wr-bone); }
 .track[data-phase="lost"] { --tone: var(--wr-dim); }
 .track[data-phase="lost"][data-status="failed"] { --tone: var(--wr-alert); }
 .track[data-phase="delivered"] .track-row, .track[data-phase="lost"] .track-row { opacity: 0.6; }
@@ -242,9 +280,9 @@ body.wr {
 }
 
 /* Detail: what the unit is doing, then the field checklist. Indented under the target column. */
-.track-detail { padding: 0 8px 9px calc(74px * 2 + 24px + 8px); display: flex; flex-direction: column; gap: 5px; }
+.track-detail { padding: 0 8px 10px calc(72px + 76px + 24px + 8px); display: flex; flex-direction: column; gap: 5px; }
 [data-mode="plain"] .track-detail { padding-left: calc(40px + 60px + 24px + 8px); }
-.c-now { font-size: 12px; color: var(--wr-fg-2); }
+.c-now { font-size: 12px; color: var(--wr-muted); }
 .c-now:empty { display: none; }
 .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 12px; color: var(--wr-muted); }
 .checklist:empty { display: none; }
@@ -252,9 +290,10 @@ body.wr {
 .checklist li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .checklist li i { font-style: normal; font-family: var(--wr-mono); font-size: 11px; }
 .checklist li em { font-style: normal; font-size: 11px; color: var(--wr-cyan); }
-.checklist li[data-state="ok"] i { color: var(--wr-ok); }
+.checklist li[data-state="ok"] i { color: var(--wr-muted); }
 .checklist li[data-state="ai"] i { color: var(--wr-cyan); }
-.checklist li[data-state="need"] { color: var(--wr-warn); }
+.checklist li[data-state="need"] { color: var(--wr-bone); }
+.checklist li[data-state="need"] i { color: var(--wr-warn); }
 .checklist li[data-state="todo"] { color: var(--wr-dim); }
 .track-detail .thumb { display: block; width: min(360px, 100%); border: 1px solid var(--wr-line-2); }
 
@@ -264,23 +303,41 @@ body.wr {
 
 /* ---- operator input (under a row on hold) ------------------------------------ */
 
-.operator { margin: 0 8px 12px calc(74px * 2 + 24px + 8px); padding: 8px 0 0 12px; border-left: 2px solid var(--wr-warn); display: flex; flex-direction: column; gap: 10px; }
+.operator { margin: 2px 8px 14px calc(72px + 76px + 24px + 8px); padding: 2px 0 0 12px; border-left: 1px solid var(--wr-line-2); display: flex; flex-direction: column; gap: 12px; }
 [data-mode="plain"] .operator { margin-left: calc(40px + 60px + 24px + 8px); }
-.op-head { display: flex; gap: 12px; align-items: baseline; font: 600 13px/1.2 var(--wr-head); letter-spacing: 0.06em; color: var(--wr-warn); }
-.op-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.op-timer { font: 11px var(--wr-mono); letter-spacing: 0.04em; }
-.need { display: flex; flex-direction: column; gap: 7px; max-width: 680px; }
-.need + .need { padding-top: 10px; border-top: 1px solid var(--wr-line); }
+.need { display: flex; flex-direction: column; gap: 8px; max-width: 600px; }
+.need + .need { padding-top: 12px; border-top: 1px solid var(--wr-line); }
 .need.sent { opacity: 0.45; pointer-events: none; }
-.need-q { font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
-.need-kind { font: 500 10.5px/1 var(--wr-mono); letter-spacing: 0.06em; margin-right: 8px; color: var(--wr-warn); }
+.need-q { font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.need-kind { font: 500 10.5px/1 var(--wr-mono); letter-spacing: 0.06em; margin-right: 8px; color: var(--wr-muted); }
 .need[data-kind="error"] .need-kind, .need[data-kind="stalled"] .need-kind { color: var(--wr-alert); }
 .need[data-kind="review_submit"] .need-q { color: var(--wr-fg-2); font-size: 13px; }
 .need-detail { font-size: 12px; color: var(--wr-muted); }
-.need-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wr .need .wr-input { max-width: 560px; }
+.wr .need textarea.wr-input { min-height: 64px; }
+.need-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+/* Answers are secondary to QUEUE: outlined, not filled. */
+.wr .need .wr-btn.primary { background: transparent; border-color: var(--wr-bone); color: var(--wr-bone); }
+.wr .need .wr-btn.primary:hover:not(:disabled) { background: rgba(241, 237, 228, 0.08); }
 .need-multi { display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow: auto; }
-.wr .wr-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--wr-fg-2); cursor: pointer; }
+.wr .wr-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--wr-muted); cursor: pointer; }
 .wr .wr-check input { width: auto; margin: 0; accent-color: var(--wr-bone); }
+/* "Remember" is a small toggle, not a browser checkbox. */
+.wr .wr-check input.toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  min-width: 24px;
+  height: 12px;
+  padding: 0;
+  border: 1px solid var(--wr-line-2);
+  border-radius: 6px;
+  background: radial-gradient(circle 4px at 6px 50%, var(--wr-dim) 98%, transparent) var(--wr-well);
+  transition: background-position 0.15s;
+  cursor: pointer;
+}
+.wr .wr-check input.toggle:checked { border-color: var(--wr-muted); background: radial-gradient(circle 4px at calc(100% - 6px) 50%, var(--wr-bone) 98%, transparent) #1d1c19; }
+.wr .wr-check input.toggle:focus-visible { outline: 1px solid var(--wr-bone); outline-offset: 2px; }
 
 /* ---- the guarded release switch (src/ui/guarded.ts) -----------------------------
    The one place with an animation budget: the cover flips up, the ring fills. */
@@ -321,31 +378,40 @@ body.wr {
 .wr .guarded[data-state="fired"] .guard-ring .prog { stroke: #0c0c0b; }
 @keyframes wr-fired { from { box-shadow: 0 0 0 6px rgba(241, 237, 228, 0.35); } }
 .wr .guard-switch:focus-visible { outline: 1px solid var(--wr-bone); outline-offset: 3px; }
+.wr .guarded { margin-top: 6px; }
 .wr .guard-cover {
   position: absolute;
-  inset: -3px;
+  inset: -4px -4px -4px -4px;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   margin: 0;
   padding: 0 12px;
   border: 1px solid #000;
-  border-radius: 0;
+  border-radius: 2px;
   cursor: pointer;
   font: 700 14px/1 var(--wr-head);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: var(--wr-warn);
   background:
-    linear-gradient(#17140e, #17140e) center / calc(100% - 22px) calc(100% - 10px) no-repeat,
+    linear-gradient(#17140e, #17140e) center / calc(100% - 22px) calc(100% - 12px) no-repeat,
     repeating-linear-gradient(-45deg, var(--wr-warn) 0 7px, #17140e 7px 14px);
-  box-shadow: 0 2px 0 #000;
+  box-shadow: 0 3px 0 #000, inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transform-origin: 50% 0;
-  transition: transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1), opacity 0.2s;
+  transition: transform 0.24s cubic-bezier(0.3, 0.7, 0.4, 1.15), filter 0.24s;
 }
+/* Hinge pins on the top edge. */
+.wr .guard-cover::before, .wr .guard-cover::after { content: ""; position: absolute; top: -3px; width: 10px; height: 4px; background: #3a3730; border: 1px solid #000; }
+.wr .guard-cover::before { left: 14px; }
+.wr .guard-cover::after { right: 14px; }
 .wr .guard-cover:hover { color: #f0c57a; }
-.wr .guard-cover:focus-visible { outline: 1px solid var(--wr-warn); outline-offset: 3px; }
-.wr .guarded:not([data-state="closed"]) .guard-cover { transform: rotateX(-160deg); opacity: 0; pointer-events: none; }
+.wr .guard-cover:focus-visible { outline: 1px solid var(--wr-warn); outline-offset: 4px; }
+/* Lifted: the cover swings up on its hinge and stays visible above the switch, like the real thing. */
+.wr .guarded:not([data-state="closed"]) .guard-cover { transform: rotateX(-118deg); filter: brightness(0.6); pointer-events: none; }
+.wr .guarded[data-state="fired"] .guard-cover { transform: rotateX(0deg); filter: none; opacity: 0.9; }
+.wr .guarded[data-state="open"] .guard-switch::after { content: "SPACE"; margin-left: 8px; font: 500 9.5px/1.3 var(--wr-mono); color: var(--wr-dim); border: 1px solid var(--wr-line-2); border-radius: 2px; padding: 1px 4px; }
 
 /* ---- map layer -------------------------------------------------------------------- */
 .map-panel #wr-map { min-height: 120px; }
@@ -358,14 +424,13 @@ body.wr {
 .wr .chip:hover { color: var(--wr-bone); background: none; }
 .wr .chip[aria-pressed="true"] { color: var(--wr-bone); box-shadow: inset 0 -1px 0 var(--wr-bone); }
 .log-wrap { position: relative; flex: 1; min-height: 160px; }
-.log { position: absolute; inset: 0; overflow-y: auto; scrollbar-color: var(--wr-line-2) transparent; }
+.log { position: absolute; inset: 0; overflow-y: auto; scrollbar-color: var(--wr-line-2) transparent; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px); mask-image: linear-gradient(to bottom, transparent 0, #000 28px); }
+.log::before { content: ""; display: block; height: 18px; }
 .ln { padding: 6px 0 7px; border-bottom: 1px solid var(--wr-line); }
 .ln-meta { display: flex; gap: 8px; font: 11px/1.3 var(--wr-mono); letter-spacing: 0.03em; color: var(--wr-dim); }
 .ln-meta > * + *::before { content: "·"; margin-right: 8px; color: var(--wr-line-2); }
 .ln-meta .k { font-weight: 600; color: var(--wr-muted); }
 .ln .tx { margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--wr-fg-2); overflow-wrap: anywhere; }
-.ln.tone-ok .k { color: var(--wr-ok); }
-.ln.tone-warn .k { color: var(--wr-warn); }
 .ln.tone-advisory .k { color: var(--wr-cyan); }
 .ln.tone-status .k { color: var(--wr-bone); }
 .ln.tone-alert .k, .ln.tone-alert .tx { color: var(--wr-alert); }
@@ -378,7 +443,7 @@ body.wr {
 .arm-panel { flex: none; }
 .arm-panel textarea.wr-input { height: 62px; resize: none; font-size: 12.5px; }
 .arm-go { width: 100%; margin-top: 8px; }
-#wr-arm-count[data-ok="true"] { color: var(--wr-ok); }
+#wr-arm-count[data-ok="true"] { color: var(--wr-bone); }
 #wr-arm-count[data-ok="false"] { color: var(--wr-alert); }
 
 /* ---- footer, modal, toast ---------------------------------------------------------------- */

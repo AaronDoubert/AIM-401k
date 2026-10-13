@@ -8,7 +8,7 @@ import type { ToBackground } from "../../shared/messages";
 import type { FieldCheck, Need } from "../../shared/types";
 import { h } from "../common";
 import { guardedRelease } from "../guarded";
-import { progressOf, stopwatch, type TileModel } from "./model";
+import { stopwatch, type TileModel } from "./model";
 
 export type T = (key: CopyKey, vars?: Record<string, string | number>) => string;
 
@@ -31,7 +31,6 @@ export class TrackView {
   private readonly company: HTMLElement;
   private readonly role: HTMLElement;
   private readonly status: HTMLElement;
-  private readonly bar: HTMLElement;
   private readonly fieldsText: HTMLElement;
   private readonly hold: HTMLElement;
   private readonly open: HTMLButtonElement;
@@ -39,7 +38,8 @@ export class TrackView {
   private readonly checklist: HTMLElement;
   private readonly now: HTMLElement;
   private readonly operator: HTMLElement;
-  private readonly opTimer: HTMLElement;
+  /** Expanded with Enter (or by being the locked unit): shows the field checklist. */
+  expanded = false;
   private thumb: HTMLImageElement | null = null;
   private needSig = "";
   private checkSig = "";
@@ -53,8 +53,7 @@ export class TrackView {
     this.company = h("span", { className: "c-co" });
     this.role = h("span", { className: "c-role" });
     this.status = h("span", { className: "c-status" });
-    this.bar = h("b", { className: "fill" });
-    this.fieldsText = h("span", { className: "c-fields-n" });
+    this.fieldsText = h("span", { className: "c-fields" });
     this.hold = h("span", { className: "c-hold" });
     this.open = h("button", { type: "button", className: "wr-btn ghost c-open" });
     this.open.addEventListener("click", (e) => {
@@ -69,7 +68,7 @@ export class TrackView {
       this.tgt,
       h("span", { className: "c-job" }, this.company, this.role),
       this.status,
-      h("span", { className: "c-fields" }, h("i", { className: "bar" }, this.bar), this.fieldsText),
+      this.fieldsText,
       this.hold,
       this.open,
     );
@@ -88,7 +87,6 @@ export class TrackView {
     this.checklist = h("ul", { className: "checklist" });
     this.now = h("div", { className: "c-now" });
     this.detail = h("div", { className: "track-detail" }, this.now, this.checklist);
-    this.opTimer = h("span", { className: "op-timer" });
     this.operator = h("section", { className: "operator" });
     this.operator.hidden = true;
     this.el = h("article", { className: "track" }, this.row, this.detail, this.operator);
@@ -119,9 +117,9 @@ export class TrackView {
     setText(this.open, t("warroom.tile.open"));
     this.open.setAttribute("aria-label", t("warroom.tile.open_label", { job: [name, m.title].filter(Boolean).join(" — ") }));
 
-    this.bar.style.width = `${(progressOf(m) * 100).toFixed(1)}%`;
-    const fields = m.fieldsTotal ? t("warroom.tile.fields", { done: m.fieldsDone, total: m.fieldsTotal }) : "—";
-    setText(this.fieldsText, m.step > 1 ? `${fields} · ${t("warroom.tile.step", { step: m.step })}` : fields);
+    // Fields as a plain count ("7/9"); nothing until the form has been scanned.
+    const fields = m.fieldsTotal ? t("warroom.tile.fields", { done: m.fieldsDone, total: m.fieldsTotal }) : "";
+    setText(this.fieldsText, fields && m.step > 1 ? `${fields} ${t("warroom.tile.step", { step: m.step })}` : fields);
     setText(this.hold, m.holdingSince != null ? stopwatch(now - m.holdingSince) : "");
 
     // What the unit is doing right now, then the field checklist.
@@ -138,7 +136,11 @@ export class TrackView {
         }),
       );
     }
-    this.detail.hidden = finished || (!m.fields.length && !this.now.textContent && !(selected && m.thumb));
+    // The checklist is detail: only for the locked or expanded unit. A one-line "now" for the rest.
+    const open = selected || this.expanded;
+    this.checklist.hidden = !open;
+    this.el.classList.toggle("expanded", open);
+    this.detail.hidden = finished || m.needs.length > 0 || (!this.now.textContent && !(open && m.fields.length) && !(selected && m.thumb));
 
     // A live capture of the tab (Firefox), only for the locked unit.
     if (selected && m.thumb) {
@@ -158,7 +160,14 @@ export class TrackView {
       this.needSig = needSig;
       this.renderOperator(m, t);
     }
-    if (m.holdingSince != null) setText(this.opTimer, t("warroom.op.holding", { t: stopwatch(now - m.holdingSince) }));
+  }
+
+  /** Keyboard release: lift this unit's guard and hand focus to the switch (then hold Space). */
+  liftGuard(): boolean {
+    const cover = this.operator.querySelector<HTMLButtonElement>(".guarded[data-state=closed] .guard-cover");
+    if (!cover) return false;
+    cover.click();
+    return true;
   }
 
   /** Put the keyboard on this unit's first answer box (master caution jump). */
@@ -171,7 +180,6 @@ export class TrackView {
     this.operator.replaceChildren();
     this.operator.hidden = !m.needs.length;
     if (!m.needs.length) return;
-    this.operator.append(h("div", { className: "op-head" }, h("span", { className: "op-title", textContent: t(m.ready ? "warroom.op.ready" : "warroom.op.title") }), this.opTimer));
     // Questions first, the release last.
     const order = [...m.needs].sort((a, b) => Number(a.kind === "review_submit") - Number(b.kind === "review_submit"));
     for (const n of order) this.operator.append(this.needCard(n, t));
@@ -182,7 +190,10 @@ export class TrackView {
     const card = h("div", { className: "need" });
     card.dataset.kind = need.kind;
     card.dataset.need = need.id;
-    card.append(h("div", { className: "need-q" }, h("span", { className: "need-kind", textContent: t(`warroom.need.${need.kind}`) }), h("span", { className: "need-prompt", textContent: need.prompt })));
+    // Status and timer live on the row; the panel carries only the message and the actions.
+    // A kind tag appears only where it adds something (a fault, a sign-in wall, a CAPTCHA).
+    const tag = ["error", "stalled", "login", "captcha"].includes(need.kind) ? h("span", { className: "need-kind", textContent: t(`warroom.need.${need.kind}`) }) : "";
+    card.append(h("div", { className: "need-q" }, tag, h("span", { className: "need-prompt", textContent: need.prompt })));
     if (need.detail) card.append(h("div", { className: "need-detail", textContent: need.detail }));
 
     const row = h("div", { className: "need-actions" });
@@ -195,7 +206,6 @@ export class TrackView {
       sent();
       void send({ type: "answerNeed", needId: need.id, value, remember });
     };
-    const go = () => void send({ type: "focusJob", jobId: need.jobId });
     const btn = (label: string, fn: () => void, cls = "") => {
       const b = h("button", { type: "button", className: `wr-btn ${cls}`, textContent: label });
       b.addEventListener("click", (e) => {
@@ -204,8 +214,8 @@ export class TrackView {
       });
       return b;
     };
-    const check = (label: string, on: boolean) => {
-      const c = h("input", { type: "checkbox", checked: on });
+    const check = (label: string, on: boolean, toggle = true) => {
+      const c = h("input", { type: "checkbox", checked: on, className: toggle ? "toggle" : "" });
       return { box: c, el: h("label", { className: "wr-check" }, c, h("span", { textContent: label })) };
     };
 
@@ -220,7 +230,7 @@ export class TrackView {
       } else if (need.inputType === "multi" && need.options?.length) {
         const box = h("div", { className: "need-multi" });
         const checks = need.options.map((o) => {
-          const c = check(o, false);
+          const c = check(o, false, false);
           box.append(c.el);
           c.box.value = o;
           return c.box;
@@ -250,10 +260,10 @@ export class TrackView {
         card.append(input);
         row.append(btn(t(need.kind === "signature" ? "warroom.need.sign" : "warroom.need.fill"), submit, "primary"));
       }
-      row.append(remember.el, btn(t("warroom.need.open"), go, "ghost"));
+      row.append(remember.el);
     } else if (need.kind === "consent") {
       const always = check(t("warroom.need.always"), true);
-      row.append(btn(t("warroom.need.agree"), () => answer("checked", always.box.checked), "primary"), always.el, btn(t("warroom.need.open"), go, "ghost"));
+      row.append(btn(t("warroom.need.agree"), () => answer("checked", always.box.checked), "primary"), always.el);
     } else if (need.kind === "review_submit") {
       row.append(
         guardedRelease({
@@ -263,10 +273,8 @@ export class TrackView {
             void send({ type: "submitJob", jobId: need.jobId });
           },
         }),
-        btn(t("warroom.need.review"), go, "ghost"),
       );
     } else {
-      row.append(btn(t("warroom.need.open"), go, "primary"));
       if (need.kind === "login" || need.kind === "captcha") row.append(btn(t("warroom.need.done"), () => (sent(), void send({ type: "dismissNeed", needId: need.id }))));
       else row.append(btn(t("warroom.need.retry"), () => (sent(), void send({ type: "retryJob", jobId: need.jobId }))));
     }

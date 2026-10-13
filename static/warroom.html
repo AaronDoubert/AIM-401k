@@ -17,7 +17,7 @@
     <div class="brand">
       <img class="wordmark" src="brand/aim401k-wordmark-offwhite.svg" alt="AIM-401k" width="123" height="20" />
       <div class="brand-text">
-        <h1 id="wr-title" data-copy="warroom.title">OPERATION GAINFUL</h1>
+        <h1><span id="wr-insignia" class="insignia" aria-hidden="true"></span><span id="wr-title" data-copy="warroom.title">OPERATION GAINFUL</span></h1>
         <time id="wr-clock" class="clock">——————Z———</time>
       </div>
     </div>
@@ -27,20 +27,35 @@
     </div>
     <button id="wr-caution" class="caution" type="button" data-lit="false">
       <span class="c-name" data-copy="warroom.caution">MASTER CAUTION</span>
-      <span id="wr-caution-n" class="c-n"></span>
+      <kbd>Esc</kbd>
     </button>
     <nav class="ctl" aria-label="War Room controls">
-      <button id="wr-afk" class="wr-btn toggle" type="button" aria-pressed="false" data-copy="warroom.ctl.afk">AWAY</button>
+      <div class="annunciators" role="group">
+        <button id="wr-afk" class="ann" type="button" aria-pressed="false"><i></i><span data-copy="warroom.ctl.afk">AWAY</span><kbd>A</kbd></button>
+        <button id="wr-sound" class="ann" type="button" aria-pressed="false"><i></i><span data-copy="warroom.ctl.sound">SND</span><kbd>S</kbd></button>
+        <button id="wr-layer-map" class="ann" type="button" aria-pressed="false" aria-controls="wr-map-panel"><i></i><span data-copy="warroom.layer.map">MAP</span><kbd>M</kbd></button>
+      </div>
       <div class="stepper" role="group" aria-labelledby="wr-units-lbl">
         <span id="wr-units-lbl" class="lbl" data-copy="warroom.ctl.units">PARALLEL</span>
         <button id="wr-units-dec" class="wr-btn step" type="button" aria-label="Fewer parallel tabs">−</button>
         <output id="wr-units" aria-live="polite">1</output>
         <button id="wr-units-inc" class="wr-btn step" type="button" aria-label="More parallel tabs">+</button>
       </div>
-      <button id="wr-pause" class="wr-btn" type="button" aria-pressed="false">PAUSE</button>
-      <button id="wr-sound" class="wr-btn toggle" type="button" aria-pressed="false">SOUND OFF</button>
-      <button id="wr-layer-map" class="wr-btn toggle" type="button" aria-pressed="false" aria-controls="wr-map-panel" data-copy="warroom.layer.map">MAP</button>
-      <button id="wr-fs" class="wr-btn" type="button">FULL SCREEN</button>
+      <button id="wr-pause" class="pause-btn" type="button" aria-pressed="false"><span id="wr-pause-label">PAUSE</span><kbd>P</kbd></button>
+      <details class="menu">
+        <summary data-copy-label="warroom.menu">⋯</summary>
+        <div class="menu-list">
+          <button id="wr-fs" class="menu-item" type="button">FULL SCREEN</button>
+          <dl class="keys">
+            <dt>J / K</dt><dd data-copy="warroom.keys.move">Move selection</dd>
+            <dt>Enter</dt><dd data-copy="warroom.keys.expand">Expand</dd>
+            <dt>O</dt><dd data-copy="warroom.keys.open">Open tab</dd>
+            <dt>Space</dt><dd data-copy="warroom.keys.release">Lift guard, then hold to release</dd>
+            <dt>/</dt><dd data-copy="warroom.keys.filter">Filter tracks</dd>
+            <dt>Esc</dt><dd data-copy="warroom.keys.ack">Acknowledge caution</dd>
+          </dl>
+        </div>
+      </details>
     </nav>
   </header>
 
@@ -48,20 +63,23 @@
 
   <section class="wr-totals" aria-label="Stages">
     <div id="wr-stages"></div>
-    <div class="rank"><span class="lbl" data-copy="warroom.rank.label">RANK</span> <b id="wr-rank">RECRUIT</b> <small id="wr-rank-next"></small></div>
   </section>
 
   <main class="wr-grid" id="warroom">
     <section class="col-main">
-      <div class="sec-head"><h2 data-copy="warroom.units.title">TRACKS</h2></div>
+      <div class="sec-head">
+        <h2 data-copy="warroom.units.title">TRACKS</h2>
+        <button id="wr-filter-chip" class="filter-chip" type="button" hidden></button>
+        <label class="filter"><input id="wr-filter" type="search" spellcheck="false" data-copy-placeholder="warroom.filter.ph" /><kbd>/</kbd></label>
+      </div>
       <div id="wr-tracks" class="tracks" role="table" hidden>
         <div class="track-head" role="row">
           <span data-copy="warroom.col.unit">UNIT</span>
           <span data-copy="warroom.col.tgt">TGT</span>
           <span data-copy="warroom.col.job">TARGET</span>
           <span data-copy="warroom.col.status">STATUS</span>
-          <span data-copy="warroom.col.fields">FIELDS</span>
-          <span data-copy="warroom.col.hold">HOLD</span>
+          <span class="num" data-copy="warroom.col.fields">FIELDS</span>
+          <span class="num" data-copy="warroom.col.hold">HOLD</span>
           <span></span>
         </div>
         <div id="wr-track-list"></div>

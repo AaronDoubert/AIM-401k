@@ -137,10 +137,10 @@ describe("ops log", () => {
 
   it("formats a line with time, tone and shortened URLs", () => {
     const l = logLine({ id: "1", t: T0, kind: "launch", text: "Acme · https://www.acme.com/careers/123?gh_src=abc" }, true);
-    expect(l).toMatchObject({ time: "121403Z", kind: "launch", tone: "ok", text: "Acme · acme.com/careers/123" });
+    expect(l).toMatchObject({ time: "121403Z", kind: "launch", tone: "status", text: "Acme · acme.com/careers/123" });
     expect(logLine(op("2", "lost", T0)).tone).toBe("dim");
     expect(logLine(op("2", "error", T0)).tone).toBe("alert");
-    expect(logLine(op("3", "intervene", T0)).tone).toBe("warn");
+    expect(logLine(op("3", "intervene", T0)).tone).toBe("status"); // amber is kept for the caution light and rows on hold
     expect(logLine(op("4", "deliver", T0)).tone).toBe("status");
     expect(logLine(op("5", "contact", T0)).tone).toBe("advisory");
   });
@@ -265,8 +265,8 @@ describe("warroom copy", () => {
     const plain = { ...DEFAULT_SETTINGS, ui: { ...DEFAULT_SETTINGS.ui, chud: false } };
     expect(copy(chud, "warroom.title")).toBe("OPERATION GAINFUL");
     expect(copy(plain, "warroom.title")).toBe("Dashboard");
-    expect(copy(chud, "warroom.op.title")).toBe("OPERATOR INPUT REQUIRED");
-    expect(copy(plain, "warroom.op.title")).toBe("Needs your input");
+    expect(copy(chud, "warroom.caution")).toBe("MASTER CAUTION");
+    expect(copy(plain, "warroom.caution")).toBe("Needs you");
     expect(copy(plain, "warroom.sitrep.line", { dur: "1h 05m", delivered: 3, holding: 1, contacts: 0, lost: 2 })).toBe(
       "While you were away (1h 05m): 3 applied, 1 need you, 0 replies, 2 closed",
     );

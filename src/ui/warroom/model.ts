@@ -90,14 +90,14 @@ export function matchesFilter(kind: OpsKind, filter: LogFilter): boolean {
 /** Signal colors, cockpit doctrine: red warning, amber caution, green normal, cyan advisory, white status. */
 export type Tone = "ok" | "warn" | "alert" | "advisory" | "status" | "dim";
 
-/** Color for a log kind. Red is for real failures only; a rejection is not one. */
+/**
+ * Color for a log kind. The log is mostly white: amber belongs to the master
+ * caution and the rows on hold, red to real faults, cyan to replies.
+ */
 export function kindTone(kind: OpsKind): Tone {
   switch (kind) {
     case "launch":
-      return "ok";
     case "intervene":
-    case "afk":
-      return "warn";
     case "deliver":
     case "release":
       return "status";
