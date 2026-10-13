@@ -181,9 +181,14 @@ pnpm test         # unit and DOM tests (Vitest)
 pnpm typecheck
 pnpm package      # build and zip into release/
 pnpm e2e          # end-to-end run in Chromium; needs Playwright installed
+pnpm demo         # seeded screenshots into demo-shots/ (build first; needs Playwright)
 ```
 
 The manifest declares both `background.scripts` (used by Firefox) and `background.service_worker` (used by Chromium), so the same build runs in Chromium for the automated end-to-end tests.
+
+### Screenshots
+
+`pnpm build && pnpm demo` loads the built extension into Chromium, seeds one fixed dataset (`scripts/demo-data.mjs`: a fictional applicant, 14 jobs at movie-and-TV companies spread across every stage, needs, an ops log and live field checklists, all timestamped relative to now) and writes 2x PNGs to `demo-shots/` (gitignored): War Room (CHUD, map layer, plain mode), Tracker (table, board), the toolbar popup and the on-page overlay. Every view reads the same data, so the stage numbers agree; the script prints them and warns if a view disagrees. Edit `demo-data.mjs` to change the story. `DEMO_FULL=1` takes full-page shots, `DEMO_SHOTS=dir` changes the output folder.
 
 ### How it works
 
