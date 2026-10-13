@@ -110,6 +110,8 @@ const usMap = new UsMap(() => ({
   unplaced: (n) => t("warroom.map.unplaced", { n }),
   empty: t("warroom.map.empty"),
   stage: (id) => t(`stage.${id}` as CopyKey),
+  failed: t("status.failed"),
+  clear: t("warroom.filter.clear"),
 }));
 el.map.append(usMap.el);
 // Clicking a place on the map filters the track table to the jobs there.
@@ -302,7 +304,7 @@ function clearFilters(): void {
   mapFilter = null;
   textFilter = "";
   el.filter.value = "";
-  usMap.clearFilter?.();
+  usMap.clearFilter();
   render();
 }
 el.filterChip.addEventListener("click", clearFilters);
