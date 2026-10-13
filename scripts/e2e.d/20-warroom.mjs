@@ -138,10 +138,11 @@ export default async function warroom(t) {
     const opA = tileA.locator(".operator");
     await opA.waitFor({ timeout: 10000 });
     const opText = await opA.innerText();
-    check(/OPERATOR INPUT REQUIRED/.test(opText) && /chaotic production system/i.test(opText), "holding tile shows OPERATOR INPUT REQUIRED with the textarea question");
-    check(/HOLD \d\d:\d\d/.test(opText), "HOLD mm:ss timer");
+    check(/chaotic production system/i.test(opText) && !/OPERATOR|QUERY/.test(opText), "holding row shows the question once, without repeated labels");
+    check((await tileA.locator(".c-status").innerText()).trim() === "HOLD" && /^\d\d:\d\d$/.test((await tileA.locator(".c-hold").innerText()).trim()), "row carries the HOLD status and mm:ss timer");
     check((await wr.locator("#wr-caution").getAttribute("data-lit")) === "true", "master caution lit while a unit waits");
     await wr.click("#wr-caution");
+    check((await wr.locator("#wr-caution").getAttribute("data-lit")) === "false", "pressing master caution acknowledges it (lamp goes dark)");
     check((await wr.locator(".track.locked .operator").count()) === 1, "master caution jumps to a unit on hold");
     const ta = opA.locator("textarea");
     check((await ta.count()) === 1, "textarea control for a textarea question");
@@ -156,7 +157,7 @@ export default async function warroom(t) {
     // --- Hold-to-fire release --------------------------------------------------
     const fireA = tileA.locator(".guard-switch");
     await tileA.locator(".guard-cover").waitFor({ timeout: 10000 });
-    check(/READY FOR RELEASE/.test(await tileA.locator(".operator").innerText()), "ready row asks for release");
+    check((await tileA.locator(".c-status").innerText()).trim() === "READY", "ready row shows READY on the row");
     await fireA.hover({ force: true });
     await wr.mouse.down();
     await sleep(1600);

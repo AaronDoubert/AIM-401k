@@ -121,7 +121,7 @@ body.wr {
 /* Rank insignia beside the operation name (chud mode only). One moment on promotion. */
 .insignia { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; width: 16px; color: var(--wr-bone); cursor: help; }
 [data-mode="plain"] .insignia { display: none; }
-.ins.dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+.ins.dot { width: 11px; height: 5px; border: 2px solid currentColor; border-bottom: 0; border-right: 0; transform: rotate(45deg) translate(1px, 1px); opacity: 0.35; }
 .ins.chev { width: 11px; height: 5px; border: 2px solid currentColor; border-bottom: 0; border-right: 0; transform: rotate(45deg) translate(1px, 1px); margin: -1px 0; }
 .ins.bar { width: 13px; height: 3px; background: currentColor; }
 .ins.star { width: 7px; height: 7px; background: currentColor; clip-path: polygon(50% 0, 61% 38%, 100% 38%, 69% 61%, 80% 100%, 50% 76%, 20% 100%, 31% 61%, 0 38%, 39% 38%); }
@@ -378,7 +378,9 @@ body.wr {
 .wr .guarded[data-state="fired"] .guard-ring .prog { stroke: #0c0c0b; }
 @keyframes wr-fired { from { box-shadow: 0 0 0 6px rgba(241, 237, 228, 0.35); } }
 .wr .guard-switch:focus-visible { outline: 1px solid var(--wr-bone); outline-offset: 3px; }
-.wr .guarded { margin-top: 6px; }
+.wr .guarded { margin-top: 8px; }
+/* Room for the lifted cover above the switch. */
+.need[data-kind="review_submit"] .need-actions { padding-top: 6px; }
 .wr .guard-cover {
   position: absolute;
   inset: -4px -4px -4px -4px;
@@ -409,7 +411,7 @@ body.wr {
 .wr .guard-cover:hover { color: #f0c57a; }
 .wr .guard-cover:focus-visible { outline: 1px solid var(--wr-warn); outline-offset: 4px; }
 /* Lifted: the cover swings up on its hinge and stays visible above the switch, like the real thing. */
-.wr .guarded:not([data-state="closed"]) .guard-cover { transform: rotateX(-118deg); filter: brightness(0.6); pointer-events: none; }
+.wr .guarded:not([data-state="closed"]) .guard-cover { transform: rotateX(-96deg); filter: brightness(0.55); pointer-events: none; }
 .wr .guarded[data-state="fired"] .guard-cover { transform: rotateX(0deg); filter: none; opacity: 0.9; }
 .wr .guarded[data-state="open"] .guard-switch::after { content: "SPACE"; margin-left: 8px; font: 500 9.5px/1.3 var(--wr-mono); color: var(--wr-dim); border: 1px solid var(--wr-line-2); border-radius: 2px; padding: 1px 4px; }
 
