@@ -273,7 +273,6 @@ const caution = new MasterCaution($<HTMLButtonElement>("#caution"), gotoOldestWa
 function renderCaution(): void {
   const { needIds, jobIds } = waitingJobs(needs, jobs);
   caution.update(needIds);
-  $("#caution-n").textContent = jobIds.length ? c("warroom.caution.count", { n: jobIds.length }) : "";
   $("#caution").title = jobIds.length ? c("theme.tracker.caution.hint") : c("warroom.caution.clear");
 }
 

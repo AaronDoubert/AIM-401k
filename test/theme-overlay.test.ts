@@ -48,7 +48,7 @@ describe("overlay hold-to-release", () => {
   it("renders the HUD in CHUD mode and plain mode", () => {
     const o = new Overlay();
     o.update(state(true));
-    expect(root().textContent).toContain("OPERATOR INPUT REQUIRED");
+    expect(root().textContent).toContain("WAITING ON YOU");
     expect(root().querySelectorAll("svg.mark").length).toBeGreaterThan(0); // the supplied mark, not a typed logo
     expect(root().textContent).toContain("Acme Robotics — Platform Eng");
     expect(cover().textContent).toContain("LIFT GUARD");

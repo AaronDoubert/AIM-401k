@@ -140,7 +140,7 @@ export const CHUD = {
   "theme.ob.goSettings": "REVIEW SETTINGS",
 
   // --- overlay ------------------------------------------------------------------
-  "theme.ov.head.needs": "OPERATOR INPUT REQUIRED",
+  "theme.ov.head.needs": "WAITING ON YOU",
   "theme.ov.head.idle": "ALL QUIET",
   "theme.ov.sub": "{running} ENGAGED · {queued} QUEUED",
   "theme.ov.paused": "PAUSED",
