@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIM-401k teaser</title>
+<!--
+  "LOCK-ON" teaser. Every frame is a pure function of time: TEASER.seek(t) draws the frame at
+  t seconds, so promo/teaser/render.mjs can step through it frame by frame. Open it through
+  `node promo/teaser/render.mjs --serve` to preview (fonts and brand files load from the repo).
+
+  ?fmt=916 (1080x1920) | 11 (1080x1080) | 169 (1920x1080)   ?render=1 hides the preview controls.
+
+  The job portal is a generic, unbranded applicant-tracking page for a fictional company.
+  Everything AIM-401k (marks, colours, overlay, wording) comes from brand/ and the extension.
+-->
+<style>
+@font-face { font-family: "Geist"; font-weight: 100 900; src: url("/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-weight: 100 900; src: url("/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 500; src: url("/node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 600; src: url("/node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 700; src: url("/node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff2") format("woff2"); }
+
+:root {
+  --ink: #0c0c0b; --paper: #f1ede4; --grey: #a19d94;
+  --panel: #131311; --well: #090908; --line: #262522; --line-2: #353330;
+  --ok: #86c095; --warn: #dcae5e; --danger: #ec5f48;
+  --sans: "Geist", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --cond: "Barlow Condensed", "Arial Narrow", sans-serif;
+  /* In-page reticles use the extension's brighter on-page colours (src/content/index.ts). */
+  --r-ok: #16c754; --r-ai: #f5a000; --r-need: #ff3b30;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+#stage { position: absolute; left: 0; top: 0; overflow: hidden; background: #f4f5f7; transform-origin: 0 0; }
+.render #stage { transform: none !important; }
+
+/* ---------------- Generic job portal (fictional "Initech" careers site) ---------------- */
+#cam { position: absolute; left: 0; top: 0; width: 760px; transform-origin: 0 0; will-change: transform; }
+.ats { position: relative; width: 760px; font: 14px/1.4 Inter, "Liberation Sans", Arial, sans-serif; color: #1d2330; font-feature-settings: "cv11"; }
+.ats .bleed { margin-left: -3000px; margin-right: -3000px; padding-left: 3028px; padding-right: 3028px; }
+.ats-top { height: 58px; background: #fff; border-bottom: 1px solid #e2e5ea; display: flex; align-items: center; justify-content: space-between; }
+.ats-top .co { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -0.01em; color: #182338; }
+.ats-top .co i { width: 26px; height: 26px; border-radius: 6px; background: #182338; display: grid; place-items: center; color: #fff; font: 700 15px/1 Inter, sans-serif; font-style: normal; }
+.ats-top .nav { display: flex; align-items: center; gap: 20px; font-size: 13px; color: #2e5bc7; font-weight: 500; }
+.ats-top .av { width: 28px; height: 28px; border-radius: 50%; background: #e7ecf7; color: #2e5bc7; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.ats-job { background: #fff; padding-top: 18px; padding-bottom: 6px; }
+.ats-job h1 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -0.01em; }
+.ats-job p { margin: 3px 0 0; font-size: 13px; color: #5b6472; }
+.steps { background: #fff; border-bottom: 1px solid #e2e5ea; display: flex; padding-top: 16px; padding-bottom: 14px; }
+.step { flex: 1; position: relative; text-align: center; font-size: 11px; color: #6b7381; padding-top: 22px; line-height: 1.25; height: 50px; } /* fixed: a bold current label may wrap */
+.step::before { content: ""; position: absolute; top: 6px; left: -50%; right: 50%; height: 2px; background: #d5d9e0; }
+.step:first-child::before { display: none; }
+.step b { position: absolute; top: 0; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; border: 2px solid #b8bec8; background: #fff; z-index: 1; }
+.step.done::before, .step.cur::before { background: #2e5bc7; }
+.step.done b { border-color: #2e5bc7; background: #2e5bc7; }
+.step.done b::after { content: ""; position: absolute; left: 3px; top: 0px; width: 3px; height: 6px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.step.cur b { border-color: #2e5bc7; background: #fff; box-shadow: inset 0 0 0 3px #2e5bc7; }
+.step.cur { color: #1d2330; font-weight: 650; }
+.pg { position: absolute; left: 0; top: 0; width: 760px; padding: 22px 28px 40px; visibility: hidden; }
+.pg.on { visibility: visible; }
+.card { background: #fff; border: 1px solid #e2e5ea; border-radius: 10px; padding: 24px 30px 26px; }
+.card h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.015em; }
+.card .hint { margin: 4px 0 2px; font-size: 12px; color: #5b6472; }
+.card h3 { margin: 24px 0 0; padding-top: 18px; border-top: 1px solid #eceef1; font-size: 15px; font-weight: 650; }
+.f { margin-top: 16px; max-width: 452px; }
+.f.wide { max-width: 640px; }
+.f > label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #262d3a; }
+.f > label .req { color: #c3262e; margin-left: 2px; }
+.rw { display: flex; gap: 14px; max-width: 640px; }
+.rw .f { flex: 1; min-width: 0; }
+.in { position: relative; display: flex; align-items: center; height: 38px; padding: 0 12px; border: 1px solid #a8aeb7; border-radius: 6px; background: #fff; font-size: 14px; color: #1d2330; white-space: nowrap; overflow: hidden; }
+.in .ph { color: #6b7381; }
+.in.sel::after { content: ""; position: absolute; right: 14px; top: 50%; width: 7px; height: 7px; margin-top: -6px; border: solid #4a5262; border-width: 0 1.6px 1.6px 0; transform: rotate(45deg); }
+.in.date::after { content: ""; position: absolute; right: 12px; top: 50%; width: 14px; height: 13px; margin-top: -7px; border: 1.6px solid #4a5262; border-top-width: 4px; border-radius: 2px; }
+.in.area { height: 92px; align-items: flex-start; padding: 9px 12px; white-space: normal; line-height: 1.5; }
+.in.radio, .in.check { border-color: transparent; padding: 0 2px; gap: 24px; height: 30px; overflow: visible; }
+.opt { display: inline-flex; align-items: center; gap: 8px; }
+.opt i { width: 17px; height: 17px; border-radius: 50%; border: 1.6px solid #6b7381; display: inline-block; position: relative; }
+.opt i.on { border-color: #2e5bc7; }
+.opt i.on::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #2e5bc7; }
+.box { width: 18px; height: 18px; border-radius: 4px; border: 1.6px solid #6b7381; display: inline-block; position: relative; }
+.box.on { background: #2e5bc7; border-color: #2e5bc7; }
+.box.on::after { content: ""; position: absolute; left: 5px; top: 1px; width: 4px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.in.file { height: 66px; border: 1.5px dashed #a8aeb7; border-radius: 8px; justify-content: center; gap: 12px; color: #5b6472; font-size: 13px; }
+.in.file .sb { border: 1px solid #2e5bc7; color: #2e5bc7; border-radius: 15px; padding: 5px 14px; font-weight: 600; font-size: 12px; }
+.in.file.done { justify-content: flex-start; border-style: solid; border-color: #d9dde3; gap: 12px; padding: 0 14px; }
+.doc { width: 26px; height: 32px; border-radius: 3px; background: #c3262e; color: #fff; font: 700 8px/32px Inter, sans-serif; text-align: center; flex: none; }
+.fmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.fmeta b { font-size: 13px; font-weight: 600; color: #1d2330; }
+.fmeta s { text-decoration: none; display: block; height: 4px; border-radius: 2px; background: #e6e9ee; overflow: hidden; }
+.fmeta s u { display: block; height: 100%; background: #2e5bc7; width: 0; }
+.fok { color: #1f8a4c; font-weight: 700; font-size: 12px; }
+.navb { display: flex; justify-content: flex-end; gap: 12px; margin-top: 28px; }
+.btn { height: 38px; padding: 0 22px; border-radius: 19px; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; }
+.btn.sec { border: 1px solid #2e5bc7; color: #2e5bc7; background: #fff; }
+.btn.pri { background: #2e5bc7; color: #fff; }
+
+/* ---------------- AIM-401k layer: lock-on reticles (page coordinates) ---------------- */
+.ret { position: absolute; pointer-events: none; opacity: 0; --c: var(--r-ok); }
+.ret .ol { position: absolute; inset: -4px; border: 1px solid var(--c); }
+.ret.ai .ol { border-style: dashed; }
+.ret.need .ol { border-width: 2px; inset: -5px; }
+.ret .k { position: absolute; width: 11px; height: 9px; border: 0 solid var(--c); }
+.ret .k.tl { border-width: 2px 0 0 2px; } .ret .k.tr { border-width: 2px 2px 0 0; }
+.ret .k.bl { border-width: 0 0 2px 2px; } .ret .k.br { border-width: 0 2px 2px 0; }
+
+#scrim { position: absolute; pointer-events: none; opacity: 0; box-shadow: 0 0 0 9000px rgba(12, 12, 11, 0.62); }
+
+/* ---------------- HUD (stage coordinates, design px x k) ---------------- */
+#hud { position: absolute; left: 0; top: 0; height: 56px; transform-origin: 0 0; background: var(--ink); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 10px; padding: 0 16px; color: var(--paper); font-variant-numeric: tabular-nums; }
+#hud .mk { width: 20px; height: 20px; display: block; }
+#hud .mk svg, #ov .mk svg { width: 100%; height: 100%; display: block; }
+.lamp { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.lamp.waiting { background: var(--warn); }
+#hud .st { font: 600 17px/1 var(--cond); letter-spacing: .07em; }
+#hud .tg { font: 500 12px/1 var(--mono); letter-spacing: .06em; color: var(--grey); margin-left: 4px; }
+#hud .sp { flex: 1; }
+#hud .ct { font: 500 13px/1 var(--mono); letter-spacing: .06em; color: var(--grey); }
+#hud .ct b { color: var(--paper); font-weight: 500; font-size: 17px; margin-left: 6px; }
+#hud .bar { position: absolute; left: 0; bottom: -1px; height: 2px; background: var(--paper); width: 0; }
+.caution { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 38px; padding: 0 12px; margin-left: 6px;
+  border: 1px solid #f0c57a; background: var(--warn); color: #17130a; }
+.caution b { font: 600 13px/1 var(--cond); letter-spacing: .1em; }
+.caution small { font: 500 10px/1 var(--mono); letter-spacing: .08em; color: #4a3a14; }
+.caution.dark { background: #12110f; color: var(--warn); }
+.caution.dark small { color: var(--warn); }
+
+/* ---------------- On-page overlay: same build as src/content/overlay.ts ---------------- */
+#ov { position: absolute; width: 384px; transform-origin: 100% 100%; opacity: 0; font: 13px/1.4 var(--sans); color: var(--paper); font-variant-numeric: tabular-nums; }
+#ov .panel { background: var(--ink); border: 1px solid var(--line-2); box-shadow: 0 16px 44px rgba(0,0,0,.55); }
+#ov .head { display: flex; flex-direction: column; gap: 6px; padding: 9px 10px 9px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+#ov .head > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#ov .head b { display: flex; align-items: center; gap: 9px; font: 600 15px/1.2 var(--cond); letter-spacing: .06em; }
+#ov .head small { color: var(--grey); font: 500 13px/1.2 var(--cond); letter-spacing: .04em; }
+#ov .mk { width: 16px; height: 16px; }
+#ov .card2 { position: relative; padding: 11px 14px 12px 16px; }
+#ov .card2::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--warn); }
+#ov .job { font-size: 12px; color: var(--grey); margin-bottom: 5px; }
+#ov .kind { display: inline-block; font: 500 10px/1.4 var(--mono); letter-spacing: .1em; padding: 1px 5px; margin-right: 8px; border: 1px solid currentColor; color: var(--warn); vertical-align: 1px; }
+#ov .prompt { font-size: 14px; line-height: 1.4; margin: 2px 0 9px; }
+#ov .ta { height: 72px; border: 1px solid var(--fg, var(--paper)); box-shadow: 0 0 0 1px var(--paper); background: var(--well); padding: 7px 9px; color: #79766f; font-size: 13px; position: relative; }
+#ov .caret { display: inline-block; width: 1px; height: 15px; background: var(--paper); vertical-align: -3px; margin-right: 1px; }
+#ov .row { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+#ov .b { display: inline-flex; align-items: center; font: 600 14px/1.2 var(--cond); letter-spacing: .05em; padding: 6px 11px; min-height: 30px; border: 1px solid var(--line-2); background: var(--panel); color: var(--paper); }
+#ov .b.primary { background: var(--paper); border-color: var(--paper); color: var(--ink); }
+#ov .b.link { border-color: transparent; background: none; color: var(--grey); padding: 6px 5px; font-weight: 500; }
+#ov .b.icon { padding: 4px 9px; min-height: 26px; font-size: 15px; }
+#ov .rem { display: inline-flex; gap: 5px; align-items: center; font: 500 13px/1 var(--cond); letter-spacing: .03em; color: var(--grey); }
+#ov .cb { width: 13px; height: 13px; background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l3 3 5-6' fill='none' stroke='%230c0c0b' stroke-width='2'/%3E%3C/svg%3E") no-repeat center / 9px 7px; }
+
+/* ---------------- End card ---------------- */
+#end { position: absolute; inset: 0; background: var(--ink); visibility: hidden; }
+#end .ln { position: absolute; background: #5d5a54; }
+#wm { position: absolute; }
+#wm svg { display: block; width: 100%; height: 100%; overflow: visible; }
+#tag { position: absolute; font-family: var(--mono); font-weight: 400; color: #b9b4aa; white-space: pre; letter-spacing: .32em; }
+#line { position: absolute; font-family: var(--sans); font-weight: 500; color: var(--paper); letter-spacing: -0.01em; line-height: 1.18; }
+#foot { position: absolute; font-family: var(--mono); color: var(--grey); letter-spacing: .2em; white-space: nowrap; }
+
+/* ---------------- Preview controls (hidden in render mode) ---------------- */
+#ctl { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: rgba(12,12,11,.92); color: var(--paper); font: 12px var(--mono); z-index: 9; }
+#ctl input[type=range] { flex: 1; }
+#ctl button, #ctl select { font: 12px var(--mono); background: var(--panel); color: var(--paper); border: 1px solid var(--line-2); padding: 4px 10px; }
+.render #ctl { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="cam"><div class="ats" id="ats"></div></div>
+  <div id="hud">
+    <span class="mk" data-mark></span><span class="lamp" id="hudLamp"></span><span class="st" id="hudSt">ENGAGED</span><span class="tg">TGT-0042</span>
+    <span class="sp"></span>
+    <span class="ct">FIELDS<b id="hudCt">00/26</b></span>
+    <span class="caution" id="caution"><b>MASTER CAUTION</b><small>1 HOLD</small></span>
+    <span class="bar" id="hudBar"></span>
+  </div>
+  <div id="ov">
+    <div class="panel">
+      <div class="head">
+        <div><b><span class="mk" data-mark></span><span class="lamp waiting"></span>WAITING ON YOU</b><span class="b icon">–</span></div>
+        <div><small>2 ENGAGED · 4 QUEUED</small><span class="b">PAUSE</span></div>
+      </div>
+      <div class="card2">
+        <div class="job">Initech — Backend Engineer</div>
+        <div class="prompt"><span class="kind">QUERY</span>Describe the most chaotic production system you have stabilized.</div>
+        <div class="ta"><span class="caret" id="caret"></span>Your answer</div>
+        <div class="row"><span class="b primary">FILL</span><span class="rem"><span class="cb"></span>REMEMBER</span><span class="b link">GO TO TAB</span></div>
+      </div>
+    </div>
+  </div>
+  <div id="end">
+    <div class="ln" id="lnL"></div><div class="ln" id="lnR"></div><div class="ln" id="lnT"></div><div class="ln" id="lnB"></div>
+    <div id="wm"></div>
+    <div id="tag"></div>
+    <div id="line">Fills the applications.<br>Calls you when it counts.</div>
+    <div id="foot">FIREFOX · LOCAL-ONLY · BYO AI</div>
+  </div>
+</div>
+<div id="ctl"><button id="play">pause</button><select id="fmt"><option value="916">9:16</option><option value="11">1:1</option><option value="169">16:9</option></select><input id="scrub" type="range" min="0" max="1000" value="0"><span id="clock">0.00</span></div>
+
+<script>
+(() => {
+"use strict";
+const qs = new URLSearchParams(location.search);
+const FORMATS = { "916": [1080, 1920], "11": [1080, 1080], "169": [1920, 1080] };
+const FMT = FORMATS[qs.get("fmt")] ? qs.get("fmt") : "916";
+const [W, H] = FORMATS[FMT];
+const RENDER = qs.has("render");
+if (RENDER) document.documentElement.classList.add("render");
+const $ = (s) => document.querySelector(s);
+
+// ---------------------------------------------------------------- easing / helpers
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const outCubic = (p) => 1 - Math.pow(1 - p, 3);
+const outQuart = (p) => 1 - Math.pow(1 - p, 4);
+const outExpo = (p) => (p >= 1 ? 1 : 1 - Math.pow(2, -10 * p));
+const prog = (t, a, d) => (d <= 0 ? (t >= a ? 1 : 0) : clamp((t - a) / d));
+
+// ---------------------------------------------------------------- the job portal
+const F = (label, kind, val, o = {}) => ({ label, kind, val, ...o });
+const PAGES = [
+  { title: "My Information", blocks: [
+    F("How Did You Hear About Us?", "select", "Company Website"),
+    F("Have you previously worked for Initech?", "radio", "No", { opts: ["Yes", "No"] }),
+    F("Country", "select", "United States of America"),
+    { h: "Legal Name" },
+    [F("First Name", "text", "Jordan"), F("Last Name", "text", "Ellis")],
+    { h: "Address" },
+    F("Address Line 1", "text", "1450 Larkspur Ave", { wide: 1 }),
+    [F("City", "text", "Austin"), F("State", "select", "Texas"), F("Postal Code", "text", "78704")],
+    { h: "Contact Information" },
+    F("Email Address", "text", "jordan.ellis@example.com"),
+    F("Phone Number", "text", "(512) 555-0142"),
+  ] },
+  { title: "My Experience", blocks: [
+    { h: "Work Experience 1", first: 1 },
+    F("Job Title", "text", "Senior Software Engineer"),
+    F("Company", "text", "Globex Corporation"),
+    [F("Location", "text", "Austin, TX"), F("From", "date", "03/2021")],
+    F("", "check", "I currently work here"),
+    F("Role Description", "area", "Led the payments platform team. Cut p99 latency 41% and halved on-call pages by retiring two legacy queues.", { wide: 1 }),
+    { h: "Education 1" },
+    F("School or University", "text", "Hollis State University"),
+    F("Degree", "select", "Bachelor's Degree"),
+    { h: "Resume/CV" },
+    F("", "file", "Jordan_Ellis_Resume.pdf", { wide: 1 }),
+  ] },
+  { title: "Application Questions", blocks: [
+    F("Why do you want to work at Initech?", "area", "Initech runs the kind of quiet, load-bearing infrastructure I like making boring: fewer pages, faster deploys and a calmer on-call rotation.", { ai: 1, wide: 1 }),
+    F("Are you legally authorized to work in the United States?", "select", "Yes"),
+    F("Will you now or in the future require sponsorship for employment visa status?", "select", "No", { wide: 1 }),
+    [F("What are your salary expectations?", "text", "$165,000"), F("Earliest start date", "date", "11/02/2026")],
+    F("Describe the most chaotic production system you have stabilized.", "area", "", { need: 1, wide: 1 }),
+  ] },
+];
+const STEPS = ["My Information", "My Experience", "Application Questions", "Voluntary Disclosures", "Self Identify", "Review"];
+
+const ats = $("#ats");
+ats.innerHTML = `
+  <div class="ats-top bleed"><div class="co"><i>i</i>Initech</div><div class="nav"><span>Search for Jobs</span><span>Candidate Home</span><span class="av">JE</span></div></div>
+  <div class="ats-job bleed"><h1>Backend Engineer</h1><p>Austin, TX · Hybrid · R-04217</p></div>
+  <div class="steps bleed" id="steps">${STEPS.map((s) => `<div class="step"><b></b>${s}</div>`).join("")}</div>
+  <div id="pgs" style="position:relative"></div>`;
+const pgs = $("#pgs");
+const fields = [];
+PAGES.forEach((pg, p) => {
+  const el = document.createElement("div");
+  el.className = "pg";
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<h2>${pg.title}</h2><div class="hint">* Indicates a required field</div>`;
+  const add = (f, parent) => {
+    const w = document.createElement("div");
+    w.className = "f" + (f.wide ? " wide" : "");
+    if (f.label) w.innerHTML = `<label>${f.label}<span class="req">*</span></label>`;
+    const box = document.createElement("div");
+    box.className = "in" + ({ select: " sel", date: " text date", area: " area", radio: " radio", check: " check", file: " file" }[f.kind] || "");
+    w.append(box);
+    parent.append(w);
+    fields.push({ ...f, page: p, wrap: w, box, idx: fields.length });
+  };
+  for (const b of pg.blocks) {
+    if (Array.isArray(b)) {
+      const r = document.createElement("div");
+      r.className = "rw";
+      b.forEach((f) => add(f, r));
+      card.append(r);
+    } else if (b.h) {
+      const h = document.createElement("h3");
+      h.textContent = b.h;
+      if (b.first) h.style.cssText = "border-top:0;padding-top:0;margin-top:20px";
+      card.append(h);
+    } else add(b, card);
+  }
+  card.insertAdjacentHTML("beforeend", `<div class="navb"><span class="btn sec">Back</span><span class="btn pri">Save and Continue</span></div>`);
+  el.append(card);
+  pgs.append(el);
+});
+const pageEls = [...pgs.children];
+const stepEls = [...$("#steps").children];
+const N = fields.length;
+
+// ---------------------------------------------------------------- timeline (seconds)
+// Field i locks at a_i. Gaps shrink geometrically so the fill accelerates until it blurs,
+// then the one question nobody can answer for you stops everything.
+const T = {};
+{
+  let t = 0.22;
+  let prevPage = 0;
+  fields.forEach((f, i) => {
+    if (f.page !== prevPage) { t += 0.16; prevPage = f.page; }
+    f.gap = Math.max(0.062, 0.40 * Math.pow(0.8, i));
+    f.a = t;
+    if (f.need) { f.lock = 0.2; return; }
+    f.lock = clamp(f.gap * 0.6, 0.05, 0.16);
+    f.fill = f.a + f.lock * 0.55;
+    f.type = f.ai ? 0.42 : clamp(f.gap * 0.85, 0.035, 0.34);
+    t += f.gap;
+  });
+  const need = fields[N - 1];
+  need.a = t + 0.05;
+  T.hold = need.a;                 // red lock-on, master caution
+  T.ov = T.hold + 0.42;            // overlay arrives
+  T.end = T.hold + 1.95;           // hard cut to the end card
+  T.total = T.end + 3.0;
+}
+const pageAt = (t) => { let p = 0; for (const f of fields) if (t >= f.a) p = f.page; return p; };
+
+// ---------------------------------------------------------------- reticles
+fields.forEach((f) => {
+  const r = document.createElement("div");
+  r.className = "ret" + (f.ai ? " ai" : f.need ? " need" : "");
+  r.innerHTML = `<div class="ol"></div><div class="k tl"></div><div class="k tr"></div><div class="k bl"></div><div class="k br"></div>`;
+  if (f.ai) r.style.setProperty("--c", "var(--r-ai)");
+  if (f.need) r.style.setProperty("--c", "var(--r-need)");
+  f.ret = r;
+  f.ol = r.firstElementChild;
+  f.ks = [...r.querySelectorAll(".k")];
+  $("#cam").append(r);
+});
+// Spotlight for the hold: dims the page around the one field that needs you (reticle stays on top).
+const scrim = document.createElement("div");
+scrim.id = "scrim";
+$("#cam").append(scrim, fields[N - 1].ret);
+
+// ---------------------------------------------------------------- field content per frame
+function drawField(f, t) {
+  const on = !f.need && t >= f.fill;
+  const n = on ? Math.round(f.val.length * prog(t, f.fill, f.type)) : 0;
+  const key = `${on}|${n}`;
+  if (f.drawn === key) return;
+  f.drawn = key;
+  const b = f.box;
+  switch (f.kind) {
+    case "text": case "date": case "area":
+      if (f.ai && on) {
+        const words = f.val.split(" ");
+        const k = Math.ceil(words.length * prog(t, f.fill, f.type));
+        b.textContent = words.slice(0, k).join(" ");
+      } else b.textContent = f.val.slice(0, n);
+      break;
+    case "select": b.innerHTML = on ? f.val : `<span class="ph">Select One</span>`; break;
+    case "radio": b.innerHTML = f.opts.map((o) => `<span class="opt"><i class="${on && o === f.val ? "on" : ""}"></i>${o}</span>`).join(""); break;
+    case "check": b.innerHTML = `<span class="opt"><span class="box ${on ? "on" : ""}"></span>${f.val}</span>`; break;
+    case "file":
+      if (!on) { b.classList.remove("done"); b.innerHTML = `<span>Drop file here</span><span>or</span><span class="sb">Select files</span>`; }
+      else {
+        const p = prog(t, f.fill, f.type);
+        b.classList.add("done");
+        b.innerHTML = `<span class="doc">PDF</span><span class="fmeta"><b>${f.val}</b><s><u style="width:${(p * 100).toFixed(1)}%"></u></s></span><span class="fok">${p >= 1 ? "Uploaded" : ""}</span>`;
+      }
+      break;
+  }
+}
+
+function drawReticle(f, t) {
+  const p = prog(t, f.a, f.lock);
+  if (t < f.a) { f.ret.style.opacity = 0; return; }
+  const e = outCubic(p);
+  const off = (1 - e) * 22;
+  f.ret.style.opacity = clamp(p * 2.5);
+  f.ol.style.opacity = e;
+  const [tl, tr, bl, br] = f.ks;
+  tl.style.left = bl.style.left = `${-off}px`;
+  tr.style.right = br.style.right = `${-off}px`;
+  tl.style.top = tr.style.top = `${-off}px`;
+  bl.style.bottom = br.style.bottom = `${-off}px`;
+  if (f.need) {
+    const ph = ((t - f.a) % 1.2) / 1.2;
+    f.ol.style.boxShadow = p >= 1 ? `0 0 0 ${4 + 8 * ph}px rgba(255,59,48,${0.5 * (1 - ph)})` : "none";
+  }
+}
+
+// ---------------------------------------------------------------- layout-dependent setup
+const k = Math.min(W, H) / 540;           // HUD / overlay scale
+const landscape = W > H * 1.2;
+const hudH = 56 * k;
+const fitS = Math.min(W / 760, H / 700);
+const ovScale = FMT === "11" ? k * 0.82 : k;
+const ovMargin = 16 * k;
+let ovH = 0;
+const cam = [];
+let pageTop = 0;
+const pageH = [];
+
+function measure() {
+  const st = $("#stage");
+  st.style.width = W + "px";
+  st.style.height = H + "px";
+  const hud = $("#hud");
+  hud.style.width = W / k + "px";
+  hud.style.transform = `scale(${k})`;
+  const ov = $("#ov");
+  ov.style.right = ovMargin + "px";
+  ov.style.bottom = ovMargin + "px";
+  ovH = ov.offsetHeight * ovScale;
+
+  pageTop = pgs.offsetTop;
+  pageEls.forEach((el, i) => { pageH[i] = pageTop + el.offsetHeight; });
+  const camRoot = $("#cam");
+  for (const f of fields) {
+    pageEls.forEach((el, i) => el.classList.toggle("on", i === f.page));
+    const r = rectIn(f.box, camRoot);
+    Object.assign(f.ret.style, { left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px" });
+    f.rect = rectIn(f.wrap, camRoot);
+  }
+  const nr = fields[N - 1].rect, pad = 16;
+  Object.assign(scrim.style, { left: nr.x - pad + "px", top: nr.y - pad + "px", width: nr.w + 2 * pad + "px", height: nr.h + 2 * pad + "px" });
+  buildCamera();
+  layoutEnd();
+}
+function rectIn(el, root) {
+  const a = el.getBoundingClientRect(), b = root.getBoundingClientRect();
+  const s = b.width / 760;
+  return { x: (a.left - b.left) / s, y: (a.top - b.top) / s, w: a.width / s, h: a.height / s };
+}
+
+// Camera keyframes: {t, fx, fy, s, d, ease}. (fx, fy) is the page point placed at the
+// stage focus (cx, cy). Each key eases from wherever the previous one had got to.
+function buildCamera() {
+  cam.length = 0;
+  const cx = W / 2, cy = hudH + (H - hudH) * 0.46;
+  // Early fields fill most of the frame; as the fill speeds up the camera eases out to the page.
+  const fitField = (f) => Math.min((W * 0.86) / f.rect.w, ((H - hudH) * 0.42) / f.rect.h);
+  const zoomAt = (i, f) => lerp(fitS, Math.max(fitS, fitField(f)), Math.pow(clamp(1 - i / 9), 1.4));
+  const key = (t, f, s, d, ease = outCubic) => {
+    const fx = lerp(380, f.rect.x + f.rect.w / 2, clamp((s / fitS - 1) / 0.25));
+    cam.push({ t, fx, fy: f.rect.y + f.rect.h / 2, s, d, ease, cx, cy, page: f.page });
+  };
+  key(0, fields[0], zoomAt(0, fields[0]) * 0.93, 0);
+  key(0.02, fields[0], zoomAt(0, fields[0]), 0.5, outQuart);
+  fields.forEach((f, i) => {
+    if (f.need || i === 0) return;
+    const newPage = fields[i - 1].page !== f.page;
+    key(f.a, f, zoomAt(i, f), newPage ? 0 : Math.max(0.2, f.gap * 1.6));
+  });
+  // Red field: slam in so it fills the space the overlay leaves free.
+  const need = fields[N - 1];
+  const free = landscape
+    ? { x: 0, y: hudH, w: W - (384 * ovScale + ovMargin), h: H - hudH }
+    : { x: 0, y: hudH, w: W, h: H - hudH - ovH - ovMargin };
+  const s = Math.min((free.w * 0.9) / need.rect.w, (free.h * 0.72) / need.rect.h);
+  cam.push({ t: T.hold, fx: need.rect.x + need.rect.w / 2, fy: need.rect.y + need.rect.h / 2, s, d: 0.24, ease: outExpo,
+    cx: free.x + free.w / 2, cy: free.y + free.h / 2, page: 2 });
+  // Resolve each key's start state from the one before it.
+  let prev = { fx: cam[0].fx, fy: cam[0].fy, s: cam[0].s, cx: cam[0].cx, cy: cam[0].cy };
+  cam.forEach((c, j) => {
+    c.from = j === 0 ? { ...prev } : camState(c.t, j - 1);
+  });
+}
+function camState(t, j) {
+  const c = cam[j];
+  const p = c.ease(prog(t, c.t, c.d));
+  const f = c.from;
+  return { fx: lerp(f.fx, c.fx, p), fy: lerp(f.fy, c.fy, p), s: lerp(f.s, c.s, p), cx: lerp(f.cx, c.cx, p), cy: lerp(f.cy, c.cy, p) };
+}
+function camAt(t) {
+  let j = 0;
+  for (let i = 0; i < cam.length; i++) if (cam[i].t <= t) j = i;
+  return camState(t, j);
+}
+function drawCamera(t) {
+  const c = camAt(t);
+  const page = pageAt(t);
+  const tx = c.cx - c.fx * c.s;
+  const ty = c.cy - c.fy * c.s;
+  // While filling, keep the page framed (centred when narrower than the stage, never past its
+  // edges). The hold slams in unclamped, blending out of the framed position.
+  const pw = 760 * c.s;
+  const ph = pageH[page] * c.s;
+  const fx = pw <= W ? (W - pw) / 2 : clamp(tx, W - pw, 0);
+  const fy = clamp(ty, Math.min(hudH, H - ph), hudH);
+  const w = t >= T.hold ? outExpo(prog(t, T.hold, 0.24)) : 0;
+  $("#cam").style.transform = `translate(${lerp(fx, tx, w).toFixed(2)}px, ${lerp(fy, ty, w).toFixed(2)}px) scale(${c.s.toFixed(4)})`;
+  scrim.style.opacity = t >= T.hold ? outCubic(prog(t, T.hold + 0.06, 0.25)) : 0;
+}
+
+// ---------------------------------------------------------------- end card layout
+const END = {};
+let zeroG, zeroCheck, restPaths;
+function layoutEnd() {
+  const wmW = Math.min(W, H) * 0.76;
+  const sc = wmW / 6333;                       // svg units -> px
+  const wmH = 1030 * sc;
+  const inkW = 6223 * sc;                       // glyph ink spans x = -1 .. 6222
+  const inkLeft = (W - inkW) / 2;
+  const wmLeft = inkLeft - 59 * sc;             // viewBox starts at x = -60
+  const y0 = H * (FMT === "11" ? 0.43 : 0.42);  // centre of the 0
+  const wmTop = y0 - (940 - 375) * sc;
+  const cap = 750 * sc;
+  Object.assign($("#wm").style, { left: wmLeft + "px", top: wmTop + "px", width: wmW + "px", height: wmH + "px" });
+  const x0 = wmLeft + (4339 + 60) * sc;
+  const tagSize = cap * 0.255;
+  const tagTop = wmTop + 940 * sc + cap * 0.36;
+  Object.assign($("#tag").style, { left: inkLeft + "px", top: tagTop + "px", fontSize: tagSize + "px", lineHeight: 1 });
+  const lineSize = cap * 0.4;
+  Object.assign($("#line").style, { left: inkLeft + "px", top: tagTop + tagSize + cap * 1.05 + "px", fontSize: lineSize + "px" });
+  const footSize = cap * 0.17;
+  Object.assign($("#foot").style, { left: inkLeft + "px", top: H - H * (landscape ? 0.1 : 0.075) - footSize + "px", fontSize: footSize + "px" });
+  Object.assign(END, {
+    sc, x0, y0, cap, inkLeft, inkRight: inkLeft + inkW,
+    wmInkTop: y0 - 393 * sc, tagBottom: tagTop + tagSize * 1.05,
+    ringR: 393 * sc, gap: cap * 0.45, lw: Math.max(1.5, Math.round(W / 720)),
+  });
+}
+function lineBox(el, x1, y1, x2, y2) {
+  const lw = END.lw;
+  if (y1 === y2) Object.assign(el.style, { left: Math.min(x1, x2) + "px", top: y1 - lw / 2 + "px", width: Math.max(0, Math.abs(x2 - x1)) + "px", height: lw + "px" });
+  else Object.assign(el.style, { left: x1 - lw / 2 + "px", top: Math.min(y1, y2) + "px", width: lw + "px", height: Math.max(0, Math.abs(y2 - y1)) + "px" });
+}
+const TAG = "TALENT ACQUISITION, KINETICALLY.";
+const R = { converge: 0.32, ring: 0.32, check: 0.42, word: 0.52, tagA: 0.74, tagD: 0.5, line: 1.42, foot: 1.9 };
+function drawEnd(t) {
+  const on = t >= T.end;
+  $("#end").style.visibility = on ? "visible" : "hidden";
+  if (!on) return;
+  const r = t - T.end;
+  const E = END;
+  // Crosshair: grow in from the four edges to meet on the 0, open to clear the ring, then the wordmark.
+  const g1 = outQuart(prog(r, 0, R.converge));
+  const gRing = outExpo(prog(r, R.ring, 0.14)) * (E.ringR + E.gap * 0.6);
+  const settle = outExpo(prog(r, R.word, 0.16));
+  const left = lerp(E.x0 * g1 - gRing, E.inkLeft - E.gap, settle);
+  const right = lerp(W - (W - E.x0) * g1 + gRing, E.inkRight + E.gap, settle);
+  const top = lerp(E.y0 * g1 - gRing, E.wmInkTop - E.gap, settle);
+  const bot = lerp(H - (H - E.y0) * g1 + gRing, E.tagBottom + E.gap, settle);
+  lineBox($("#lnL"), 0, E.y0, Math.max(0, left), E.y0);
+  lineBox($("#lnR"), Math.min(W, right), E.y0, W, E.y0);
+  lineBox($("#lnT"), E.x0, 0, E.x0, Math.max(0, top));
+  lineBox($("#lnB"), E.x0, Math.min(H, bot), E.x0, H);
+  // The 0 snaps in at the crosshair, its check draws, then the rest of the mark flickers on.
+  if (zeroG) {
+    const pr = prog(r, R.ring, 0.14);
+    zeroG.setAttribute("transform", `translate(4339 -375) scale(${lerp(1.45, 1, outExpo(pr)).toFixed(4)})`);
+    zeroG.style.opacity = r >= R.ring ? 1 : 0;
+    zeroCheck.style.strokeDashoffset = (725 * (1 - outCubic(prog(r, R.check, 0.12)))).toFixed(1);
+    const wordOn = r >= R.word && !(r >= R.word + 0.034 && r < R.word + 0.067);
+    restPaths.forEach((p) => (p.style.opacity = wordOn ? 1 : 0));
+  }
+  const n = Math.floor(TAG.length * prog(r, R.tagA, R.tagD));
+  $("#tag").innerHTML = TAG.slice(0, n) + `<span style="color:transparent">${TAG.slice(n)}</span>`;
+  const flick = (a) => (r >= a && !(r >= a + 0.034 && r < a + 0.067) ? 1 : 0);
+  $("#line").style.opacity = flick(R.line);
+  $("#foot").style.opacity = flick(R.foot);
+}
+
+// ---------------------------------------------------------------- HUD + overlay
+function drawHud(t) {
+  const hold = t >= T.hold;
+  let done = 0;
+  for (const f of fields) if (!f.need && t >= f.a + f.lock) done++;
+  $("#hudCt").textContent = `${String(done).padStart(2, "0")}/${N}`;
+  $("#hudBar").style.width = `${(done / N) * 100}%`;
+  $("#hudLamp").className = "lamp" + (hold ? " waiting" : "");
+  $("#hudSt").textContent = hold ? "HOLD" : "ENGAGED";
+  const c = $("#caution");
+  c.style.display = hold ? "flex" : "none";
+  // Same flash as the War Room's master caution: steps(1), 0.36 s period, 5 times.
+  const fr = (t - T.hold) / 0.36;
+  c.classList.toggle("dark", hold && fr < 5 && fr % 1 >= 0.5);
+
+  const ov = $("#ov");
+  const p = prog(t, T.ov, 0.2);
+  ov.style.opacity = t >= T.ov ? outCubic(p) : 0;
+  ov.style.transform = `translateY(${((1 - outCubic(p)) * 18 * ovScale).toFixed(2)}px) scale(${ovScale})`;
+  $("#caret").style.opacity = ((t - T.ov) % 1.0) < 0.55 ? 1 : 0;
+}
+
+// ---------------------------------------------------------------- frame
+function seek(t) {
+  t = clamp(t, 0, T.total);
+  const page = pageAt(t);
+  pageEls.forEach((el, i) => el.classList.toggle("on", i === page));
+  stepEls.forEach((el, i) => { el.className = "step" + (i < page ? " done" : i === page ? " cur" : ""); });
+  for (const f of fields) {
+    if (f.page !== page) continue;
+    drawField(f, t);
+    drawReticle(f, t);
+  }
+  for (const f of fields) if (f.page !== page) f.ret.style.opacity = 0;
+  drawCamera(t);
+  drawHud(t);
+  drawEnd(t);
+  return t;
+}
+
+// Sound cues for render.mjs (seconds).
+function timeline() {
+  const ev = [];
+  let lastPage = 0;
+  for (const f of fields) {
+    if (f.page !== lastPage) { ev.push({ t: f.a - 0.02, kind: "page" }); lastPage = f.page; }
+    ev.push({ t: f.a + (f.need ? 0 : f.lock * 0.8), kind: f.need ? "need" : "lock", i: f.idx, n: N });
+  }
+  ev.push({ t: T.hold + 0.1, kind: "caution" });
+  ev.push({ t: T.ov, kind: "arrive" });
+  ev.push({ t: T.end, kind: "cut" });
+  ev.push({ t: T.end + R.ring, kind: "ring" });
+  ev.push({ t: T.end + R.word, kind: "lockon" });
+  for (let i = 0; i < TAG.length; i++) if (TAG[i] !== " ") ev.push({ t: T.end + R.tagA + (R.tagD * i) / TAG.length, kind: "type" });
+  ev.push({ t: T.end + R.line, kind: "line" });
+  return { duration: T.total, events: ev, T: { ...T } };
+}
+
+// ---------------------------------------------------------------- boot
+async function svg(url, maskFrom, maskTo) {
+  const txt = await (await fetch(url)).text();
+  return maskFrom ? txt.replaceAll(maskFrom, maskTo) : txt;
+}
+async function boot() {
+  const mark = await svg("/brand/aim401k-mark-offwhite-transparent.svg");
+  document.querySelectorAll("[data-mark]").forEach((el, i) => { el.innerHTML = mark.replaceAll("mmo", `mmo${i}`); });
+  $("#wm").innerHTML = await svg("/brand/aim401k-wordmark-offwhite.svg");
+  const root = $("#wm svg");
+  zeroG = root.querySelector('g[transform^="translate(4339"]');
+  zeroCheck = zeroG.querySelector(":scope > path");
+  zeroCheck.style.strokeDasharray = "725";
+  restPaths = [...root.querySelectorAll(":scope > path")];
+  await Promise.all([
+    document.fonts.load('400 20px "Geist"'), document.fonts.load('500 20px "Geist"'),
+    document.fonts.load('400 20px "Geist Mono"'), document.fonts.load('500 20px "Geist Mono"'),
+    document.fonts.load('500 20px "Barlow Condensed"'), document.fonts.load('600 20px "Barlow Condensed"'),
+  ]);
+  await document.fonts.ready;
+  measure();
+  seek(0);
+  window.TEASER = { seek, timeline, T, format: FMT, size: [W, H] };
+  window.__ready = true;
+  if (!RENDER) preview();
+}
+
+function preview() {
+  const st = $("#stage");
+  const fit = () => {
+    const s = Math.min(innerWidth / W, (innerHeight - 40) / H);
+    st.style.transform = `scale(${s})`;
+    st.style.left = (innerWidth - W * s) / 2 + "px";
+  };
+  fit();
+  addEventListener("resize", fit);
+  $("#fmt").value = FMT;
+  $("#fmt").onchange = (e) => { location.search = `?fmt=${e.target.value}`; };
+  let playing = true, t0 = performance.now(), t = 0;
+  const scrub = $("#scrub");
+  $("#play").onclick = () => { playing = !playing; $("#play").textContent = playing ? "pause" : "play"; t0 = performance.now() - t * 1000; };
+  scrub.oninput = () => { t = (scrub.value / 1000) * T.total; t0 = performance.now() - t * 1000; seek(t); $("#clock").textContent = t.toFixed(2); };
+  addEventListener("keydown", (e) => {
+    if (e.key === " ") $("#play").click();
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") { t = clamp(t + (e.key === "ArrowRight" ? 1 : -1) / 60, 0, T.total); t0 = performance.now() - t * 1000; seek(t); }
+  });
+  const loop = (now) => {
+    if (playing) {
+      t = ((now - t0) / 1000) % (T.total + 0.6);
+      seek(t);
+      scrub.value = Math.round((Math.min(t, T.total) / T.total) * 1000);
+      $("#clock").textContent = t.toFixed(2);
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+boot();
+})();
+</script>
+</body>
+</html>
