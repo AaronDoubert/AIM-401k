@@ -21,6 +21,8 @@ export interface GuardedOptions {
   labels: { guard: string; hold: string; arming: string; done: string; hint: string };
   /** Called exactly once, when the hold completes. */
   onFire: () => void;
+  /** false: no cover, just press-and-hold (for actions that don't submit anything). Default true. */
+  guard?: boolean;
   /** Hold duration. Default HOLD_MS. */
   ms?: number;
   /** The cover drops again after this long open without arming. Default 8000. */
@@ -125,6 +127,7 @@ export function guardedRelease(o: GuardedOptions): HTMLElement {
   };
   const armRelock = () => {
     clearRelock();
+    if (o.guard === false) return;
     relockTimer = setTimeout(() => {
       relockTimer = null;
       if (state !== "open") return;
@@ -252,7 +255,7 @@ export function guardedRelease(o: GuardedOptions): HTMLElement {
   sw.addEventListener("blur", cancel);
 
   sw.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && state === "open") {
+    if (e.key === "Escape" && state === "open" && o.guard !== false) {
       e.stopPropagation();
       clearRelock();
       set("closed");
@@ -282,6 +285,10 @@ export function guardedRelease(o: GuardedOptions): HTMLElement {
   sw.addEventListener("dragstart", (e) => e.preventDefault());
 
   setP(0);
-  set("closed");
+  if (o.guard === false) {
+    cover.remove();
+    root.classList.add("unguarded");
+    set("open");
+  } else set("closed");
   return root;
 }

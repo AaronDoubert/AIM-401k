@@ -596,6 +596,17 @@ body.popup { width: 360px; padding: 0; background-size: 24px 24px; }
 .popup .warroom-btn .t { font-family: var(--font-head); font-weight: 600; font-size: 17px; letter-spacing: 0.03em; }
 .popup .warroom-btn .s { display: block; font-family: var(--font-body); font-weight: 400; font-size: 12px; letter-spacing: 0; color: var(--muted); margin-top: 1px; }
 .popup .warroom-btn .go { font-family: var(--font-mono); color: var(--accent); font-size: 16px; }
+/* Spotter: the on/off for page detection. Lit cyan when watching; it's advisory, never amber. */
+.popup .spotter { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; text-align: left;
+  border: 1px solid var(--line-2); background: var(--panel); color: var(--fg); cursor: pointer; }
+.popup .spotter:hover { background: var(--raised); }
+.popup .spotter .t { font-family: var(--font-head); font-weight: 600; font-size: 15px; letter-spacing: 0.04em; }
+.popup .spotter .s { display: block; font-family: var(--font-body); font-size: 12px; color: var(--muted); margin-top: 1px; }
+.popup .spotter .state { font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); }
+.popup .spotter[aria-checked="true"] { border-color: var(--cyan); }
+.popup .spotter[aria-checked="true"] .pip { background: var(--cyan); }
+.popup .spotter[aria-checked="true"] .state { color: var(--cyan); }
+.popup .spotter[aria-checked="false"] .pip { background: var(--muted); opacity: .5; }
 .popup .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .popup .actions button { padding: 7px 8px; font-size: 13.5px; }
 .popup .arm { display: flex; flex-direction: column; gap: 6px; }

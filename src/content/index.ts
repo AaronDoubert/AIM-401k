@@ -1,6 +1,7 @@
 import { api } from "../shared/api";
-import type { ContentContext, OverlayState, ToBackground, ToContent } from "../shared/messages";
+import type { ContentContext, OverlayState, SpotReply, ToBackground, ToContent } from "../shared/messages";
 import { Autopilot } from "./autopilot";
+import { spotJob } from "./detect";
 import { Overlay } from "./overlay";
 
 declare global {
@@ -48,9 +49,12 @@ async function main(): Promise<void> {
   let overlay: Overlay | null = null;
   let pilot: Autopilot | null = null;
 
+  let managed = false;
   const startPilot = async (): Promise<void> => {
     const ctx = (await send({ type: "hello", top, url: location.href })) as ContentContext | undefined;
     if (!ctx?.managed) return;
+    managed = true;
+    if (overlay?.spotted?.phase === "ready") overlay.setSpot(null);
     if (!pilot) {
       const style = document.createElement("style");
       style.textContent = HIGHLIGHT_CSS;
@@ -93,6 +97,39 @@ async function main(): Promise<void> {
     }
   }
   await startPilot();
+  if (top) watchForPostings();
+
+  // Spotter: when this tab shows a job posting, offer it from a corner card. Checked once the
+  // page settles and again whenever the URL changes (LinkedIn/Indeed swap postings in place).
+  // Postings the user waved off stay off for this page's life.
+  function watchForPostings(): void {
+    const dismissed = new Set<string>();
+    let lastUrl = "";
+    let tries = 0;
+    const check = async () => {
+      if (managed) return;
+      const url = location.href;
+      if (url !== lastUrl) {
+        if (overlay?.spotted && overlay.spotted.url !== url) {
+          if (overlay.spotted.phase === "ready") dismissed.add(overlay.spotted.url);
+          overlay.setSpot(null);
+        }
+        lastUrl = url;
+        tries = 0;
+      }
+      if (overlay?.spotted || dismissed.has(url) || tries >= 4) return;
+      tries++; // client-rendered boards fill in late: look a few times, then stop
+      const meta = spotJob();
+      if (!meta) return;
+      tries = 4;
+      const reply = (await send({ type: "spot", url, meta })) as SpotReply | undefined;
+      if (!reply?.show || managed || location.href !== url) return;
+      overlay ??= new Overlay();
+      overlay.setSpot({ url, meta, reply, phase: "ready" });
+    };
+    setTimeout(() => void check(), 900);
+    setInterval(() => void check(), 1500);
+  }
 }
 
 void main();

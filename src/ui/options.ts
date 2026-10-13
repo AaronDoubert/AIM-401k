@@ -14,6 +14,7 @@ import { renderPrivacy } from "./privacy";
 import { control, type FieldSpec, PROFILE_GROUPS, renderEducation, renderFields, renderWork } from "./profileForm";
 
 const AUTOMATION: FieldSpec[] = [
+  { key: "spotter", label: "Spotter: recognize job postings in tabs I open and offer to start from a corner card", type: "checkbox" },
   { key: "autoAdvance", label: "Click Next / Continue on multi-step forms", type: "checkbox" },
   { key: "autoSubmit", label: "Submit automatically when nothing needs review (otherwise you get a 'Ready' ping)", type: "checkbox" },
   { key: "fillOptional", label: "Fill optional questions when the answer is known", type: "checkbox" },

@@ -47,6 +47,9 @@ async function render(): Promise<void> {
   $("#pip").className = `pip ${state.paused ? "off" : state.needs.length ? "alert" : state.running ? "" : "off"}`;
   $("#wr-lamp").className = `pip ${state.needs.length ? "alert" : state.running ? "" : "off"}`;
   $("#clock").textContent = settings.ui.chud ? dtg(Date.now()) : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  $("#spotter").setAttribute("aria-checked", String(settings.spotter));
+  $("#spotter-state").textContent = settings.spotter ? "ON" : "OFF";
+  $("#spotter-sub").textContent = settings.spotter ? c("theme.popup.spotter.on") : c("theme.popup.spotter.off");
   $<HTMLInputElement>("#ui-plain").checked = !settings.ui.chud;
   $<HTMLInputElement>("#ui-sound").checked = settings.ui.sound;
 
@@ -107,6 +110,13 @@ $("#add").addEventListener("click", async () => {
   $<HTMLTextAreaElement>("#urls").value = "";
   const k = urls.length - n;
   toast(c("theme.toast.armed", { n, s: n === 1 ? "" : "s", dup: k > 0 ? c("theme.toast.dup", { k }) : "" }));
+  await render();
+});
+
+$("#spotter").addEventListener("click", async () => {
+  const raw = (await api.storage.local.get(STORAGE_KEYS.settings)) as { settings?: Record<string, unknown> };
+  const on = !normalizeSettings(raw.settings).spotter;
+  await api.storage.local.set({ settings: { ...(raw.settings ?? {}), spotter: on } });
   await render();
 });
 

@@ -1,4 +1,4 @@
-import type { AnswerEntry, IntelItem, IntelSource, Job, Need, NeedKind, OpsEvent, PageMeta, Profile, ProviderId, RawMail, Settings, UnitState } from "./types";
+import type { AnswerEntry, IntelItem, IntelSource, Job, JobStatus, Need, NeedKind, OpsEvent, PageMeta, Profile, ProviderId, RawMail, Settings, UnitState } from "./types";
 
 /** Fields the tracker, board and spreadsheet import may edit on a job. */
 export type JobPatch = Partial<Pick<Job, "status" | "notes" | "company" | "title" | "location" | "appliedAt">>;
@@ -66,6 +66,9 @@ export type ToBackground =
   | { type: "retryJob"; jobId: string }
   | { type: "addJobs"; urls: string[]; start: boolean }
   | { type: "adoptTab"; tabId: number }
+  | { type: "spot"; url: string; meta: PageMeta }
+  | { type: "engageHere"; url: string; meta: PageMeta }
+  | { type: "saveSpotted"; url: string; meta: PageMeta }
   | { type: "markApplied"; tabId: number }
   | { type: "setPaused"; paused: boolean }
   | { type: "updateJob"; jobId: string; patch: JobPatch }
@@ -153,6 +156,13 @@ export interface OverlayState {
   queued: number;
   /** settings.ui.chud: CHUD wording (true) or plain (false) in the in-page overlay. */
   chud: boolean;
+}
+
+/** Reply to "spot": whether to show the corner card for this posting, and what's known about it. */
+export interface SpotReply {
+  show: boolean;
+  chud: boolean;
+  known?: { status: JobStatus; appliedAt: number | null; elsewhere: boolean };
 }
 
 // background -> content

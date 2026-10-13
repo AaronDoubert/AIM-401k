@@ -18,6 +18,12 @@
 
     <div class="statusline"><span class="pip" id="pip"></span><span id="sub" aria-live="polite">—</span><span class="clock" id="clock"></span><button id="pause" data-copy="theme.pause">PAUSE</button></div>
 
+    <button id="spotter" class="spotter" type="button" role="switch" aria-checked="true">
+      <span class="pip" id="spotter-lamp"></span>
+      <span><span class="t" data-copy="theme.popup.spotter">SPOTTER</span><span class="s" id="spotter-sub"></span></span>
+      <span class="state" id="spotter-state">ON</span>
+    </button>
+
     <div id="setup" class="need ok frame" role="button" tabindex="0" style="display:none">
       <b data-copy="theme.popup.setup.title">SETUP INCOMPLETE</b>
       <small data-copy="theme.popup.setup.body">Import your resume so AIM-401k can fill forms.</small>

@@ -129,6 +129,8 @@ export interface Settings {
   /** Operator away: War Room collects prompts, desktop pings are muted, sitrep on return. */
   afk: boolean;
   intel: IntelSettings;
+  /** Spotter: recognize job postings in the tabs you open and offer to engage from a corner card. */
+  spotter: boolean;
   /** Privacy guard: strip contact details (email, phone, street, postal code) from what's sent to AI. */
   aiRedact: boolean;
 }
