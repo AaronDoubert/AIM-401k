@@ -11,23 +11,23 @@
   <header class="topbar">
     <div class="brand">
       <img class="wordmark" src="brand/aim401k-wordmark-offwhite.svg" alt="AIM-401k" width="105" height="17" />
-      <span class="crumb" data-copy="theme.step.done">DEPLOY</span>
+      <span class="crumb" data-copy="theme.step.done">DONE</span>
     </div>
   </header>
   <main>
     <div class="page-head">
-      <h1><span data-copy="theme.ob.title">OPERATION GAINFUL</span><small data-copy-plain="theme.ob.title">Welcome to AIM-401k</small></h1>
+      <h1><span data-copy="theme.ob.title">SETUP</span><small data-copy-plain="theme.ob.title">Welcome to AIM-401k</small></h1>
       <p class="muted" data-copy="theme.ob.sub">A few minutes now saves typing on every application. Everything stays in this browser.</p>
     </div>
     <ol class="timeline" id="steps" aria-label="Setup steps"></ol>
 
     <section class="step" data-step="resume">
-      <h2><span data-copy="theme.ob.h.resume">LOAD DOSSIER</span><small data-copy-plain="theme.ob.h.resume">Start with your resume</small></h2>
+      <h2><span data-copy="theme.ob.h.resume">START WITH YOUR RESUME</span><small data-copy-plain="theme.ob.h.resume">Start with your resume</small></h2>
       <p class="lead">Drop it here and AIM-401k fills in your profile: contact details, jobs, schools and skills. You'll review everything next.</p>
       <label class="drop" id="drop">
         <span class="scan" aria-hidden="true"></span>
         <svg class="reticle" viewBox="0 0 54 54" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="27" cy="27" r="14"/><path d="M27 4v14M27 36v14M4 27h14M36 27h14"/></g><rect x="25" y="25" width="4" height="4" fill="currentColor"/></svg>
-        <b data-copy="theme.ob.drop">DROP DOSSIER</b>
+        <b data-copy="theme.ob.drop">DROP YOUR RESUME</b>
         <span class="hint" data-copy="theme.ob.drop.hint">or click to choose a file</span>
         <span class="muted">PDF, Word (.docx), text, or <a href="https://jsonresume.org/" target="_blank" rel="noopener">JSON Resume</a>. Read locally; nothing is uploaded.</span>
         <input type="file" id="file" accept=".pdf,.docx,.txt,.md,.json,application/pdf" hidden />
@@ -37,7 +37,7 @@
     </section>
 
     <section class="step" data-step="about">
-      <h2><span data-copy="theme.ob.h.about">IDENT</span><small data-copy-plain="theme.ob.h.about">About you</small></h2>
+      <h2><span data-copy="theme.ob.h.about">ABOUT YOU</span><small data-copy-plain="theme.ob.h.about">About you</small></h2>
       <p class="lead">Check what was imported and fill any gaps.</p>
       <div class="grid" data-group="basics"></div>
       <h3>Links</h3>
@@ -45,7 +45,7 @@
     </section>
 
     <section class="step" data-step="experience">
-      <h2><span data-copy="theme.ob.h.experience">SERVICE RECORD</span><small data-copy-plain="theme.ob.h.experience">Experience &amp; education</small></h2>
+      <h2><span data-copy="theme.ob.h.experience">EXPERIENCE &amp; EDUCATION</span><small data-copy-plain="theme.ob.h.experience">Experience &amp; education</small></h2>
       <p class="lead">Used for “Work Experience” and “Education” sections, including multi-entry ones like Workday's. Most recent first.</p>
       <h3>Work history</h3>
       <div id="work"></div>
@@ -56,7 +56,7 @@
     </section>
 
     <section class="step" data-step="eligibility">
-      <h2><span data-copy="theme.ob.h.eligibility">CLEARANCE</span><small data-copy-plain="theme.ob.h.eligibility">Eligibility &amp; preferences</small></h2>
+      <h2><span data-copy="theme.ob.h.eligibility">ELIGIBILITY &amp; PREFERENCES</span><small data-copy-plain="theme.ob.h.eligibility">Eligibility &amp; preferences</small></h2>
       <p class="lead">These answer the screening questions almost every application asks.</p>
       <div class="grid" data-group="eligibility"></div>
       <h3>What you're looking for</h3>
@@ -70,19 +70,19 @@
     </section>
 
     <section class="step" data-step="ai">
-      <h2><span data-copy="theme.ob.h.ai">AI ASSET</span><small data-copy-plain="theme.ob.h.ai">AI helper (optional)</small></h2>
+      <h2><span data-copy="theme.ob.h.ai">AI HELPER</span><small data-copy-plain="theme.ob.h.ai">AI helper (optional)</small></h2>
       <p class="lead">Optional. Connect a model to draft answers to open-ended questions (“Why do you want to work here?”) and to read your resume more accurately. Several have free tiers you can start with a Google or GitHub sign-in. You can skip this and add it later in Settings.</p>
       <div id="ai"></div>
       <div id="reparse" style="margin-top:12px"></div>
     </section>
 
     <section class="step" data-step="done">
-      <h2><span data-copy="theme.ob.h.done">DEPLOYED</span><small data-copy-plain="theme.ob.h.done">You're set</small></h2>
+      <h2><span data-copy="theme.ob.h.done">READY</span><small data-copy-plain="theme.ob.h.done">You're set</small></h2>
       <div class="card deployed">
         <p class="lead">Next: paste job links into the tracker (or the toolbar popup) and AIM-401k will start applying in background tabs. It pops up a small box on whatever tab you're on when it needs you.</p>
         <div class="row">
-          <button class="primary" id="go-tracker" data-copy="theme.ob.goTracker">OPEN THEATER</button>
-          <button id="go-settings" data-copy="theme.ob.goSettings">REVIEW LOADOUT</button>
+          <button class="primary" id="go-tracker" data-copy="theme.ob.goTracker">OPEN TRACKER</button>
+          <button id="go-settings" data-copy="theme.ob.goSettings">REVIEW SETTINGS</button>
         </div>
       </div>
       <p class="muted" style="margin-top:16px">Tip: on any job page, click the AIM-401k icon, then <b data-copy="theme.popup.fill">ENGAGE THIS TAB</b>, to watch it work.</p>

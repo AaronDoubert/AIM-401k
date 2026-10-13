@@ -103,6 +103,7 @@
   --cyan: #6fb3c4;
   --danger: #ec5f48;
   --danger-soft: rgba(236, 95, 72, 0.1);
+  --cui: #502b85; /* classification banner */
   --font-body: "Geist AIM", "Geist", "Geist Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: var(--font-body);
   --font-head: "Barlow Condensed AIM", "Barlow Condensed", "DIN Condensed", "DIN Alternate", Bahnschrift, "Arial Narrow", sans-serif;
@@ -321,11 +322,11 @@ label.f > input, label.f > select, label.f > textarea { font-family: var(--font-
   color: var(--fg-2);
   white-space: nowrap;
 }
-/* Doctrine: queued is planned (dashed) · running normal (green) · waiting on you
-   (amber) · applied is status (white) · contact advisory (cyan) · failed red · closed grey. */
+/* Doctrine: queued is planned (dashed) · engaged and applied are status (white) · waiting on you
+   (amber) · contact advisory (cyan) · offer is the win (green, the only green) · failed red · closed grey. */
 .s-saved { color: var(--muted); }
 .s-queued { color: var(--fg-2); border-style: dashed; }
-.s-running { color: var(--ok); border-color: currentColor; }
+.s-running { color: var(--fg); border-color: var(--bracket); }
 .s-needs_you, .s-ready_to_submit { color: var(--warn); border-color: currentColor; }
 .s-submitted { color: var(--fg); border-color: var(--bracket); }
 .s-interviewing { color: var(--cyan); border-color: currentColor; }
@@ -431,6 +432,107 @@ label.f > input, label.f > select, label.f > textarea { font-family: var(--font-
 .stage-aside { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 
 /* ==================================================================================== */
+/* SHELL: the page frame shared by the War Room and the Tracker                         */
+/* CUI banners top and bottom, wordmark + title + clock, master caution lamp, quiet     */
+/* header controls. Plain mode (html[data-chud="0"] / html[data-mode="plain"]) hides    */
+/* the banners. The War Room keeps its own .wr-* copies of these rules in warroom.css.  */
+/* ==================================================================================== */
+body.shell { display: flex; flex-direction: column; min-height: 100vh; }
+body.shell > main { flex: 1 0 auto; width: 100%; }
+.shell-banner {
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  text-align: center;
+  font: 600 11px/1 var(--font-body);
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  color: #fff;
+  background: var(--cui);
+}
+.shell-banner.bottom { top: auto; bottom: 0; }
+html[data-chud="0"] .shell-banner, html[data-mode="plain"] .shell-banner { display: none; }
+
+.shell-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.shell-head .wordmark { height: 20px; }
+.shell-title { min-width: 0; padding-left: 12px; border-left: 1px solid var(--line-2); }
+.shell-head h1 { margin: 0; font: 600 17px/1.1 var(--font-head); letter-spacing: 0.06em; white-space: nowrap; }
+html[data-chud="0"] .shell-head h1 { letter-spacing: 0.01em; }
+.shell-clock { display: block; margin-top: 2px; font: 11px/1.2 var(--font-mono); letter-spacing: 0.06em; color: var(--muted); }
+
+/* Master caution annunciator: dark until something waits on you, then steady amber. */
+.shell-caution {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 132px;
+  height: 38px;
+  min-height: 0;
+  padding: 0 12px;
+  border-radius: 0;
+  border: 1px solid #3a3121;
+  background: #15130e;
+  color: #5d5136;
+  cursor: default;
+  font: 600 13px/1 var(--font-head);
+  letter-spacing: 0.1em;
+}
+.shell-caution:hover { border-color: #3a3121; background: #15130e; color: #5d5136; }
+.shell-caution:active { transform: none; }
+.shell-caution .c-n { font: 10px/1 var(--font-mono); letter-spacing: 0.06em; margin-top: 3px; }
+.shell-caution .c-n:empty { display: none; }
+.shell-caution[data-lit="true"], .shell-caution[data-lit="true"]:hover { background: var(--warn); border-color: var(--warn); color: #17130a; cursor: pointer; box-shadow: 0 0 18px rgba(220, 174, 94, 0.25); }
+.shell-caution[data-lit="true"]:hover { background: #e7bd72; }
+.shell-caution:focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
+.shell-caution.flash { animation: shell-caution 0.5s steps(1) 3; }
+@keyframes shell-caution { 50% { background: #15130e; color: var(--warn); } }
+
+.shell-ctl { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.shell-btn {
+  font: 600 13.5px/1 var(--font-head);
+  letter-spacing: 0.05em;
+  height: 30px;
+  min-height: 0;
+  padding: 0 11px;
+  border-radius: 0;
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.shell-btn:hover:not(:disabled) { border-color: var(--muted); background: var(--panel); }
+.shell-btn:focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
+.shell-btn[aria-pressed="true"] { border-color: var(--warn); color: var(--warn); }
+.shell-btn[aria-expanded="true"] { border-color: var(--fg); background: var(--accent-soft); }
+.shell-btn.danger { color: var(--muted); border-color: var(--line-2); }
+.shell-btn.danger:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+
+/* Totals row under the header: the shared stage strip, no boxes. */
+.shell-totals { padding: 0; border-bottom: 1px solid var(--line); }
+.shell-totals .stages { border: 0; padding: 9px 0 10px; }
+.shell-totals .stage dd { font-size: 22px; }
+
+/* Section title row: a title, then its controls on the same line. */
+.shell-sec-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; min-width: 0; }
+.shell-sec-head h2 { margin: 0 8px 0 0; font: 600 20px/1.15 var(--font-head); letter-spacing: 0.05em; color: var(--fg); white-space: nowrap; }
+html[data-chud="0"] .shell-sec-head h2 { letter-spacing: 0.01em; }
+.shell-sec-head .spacer { flex: 1; }
+
+@media (max-width: 760px) {
+  .shell-head { flex-wrap: wrap; padding: 10px 12px; gap: 10px; row-gap: 8px; }
+  .shell-ctl { margin-left: 0; width: 100%; justify-content: flex-start; }
+}
+
+/* ==================================================================================== */
 /* POPUP                                                                                */
 /* ==================================================================================== */
 body.popup { width: 360px; padding: 0; background-size: 24px 24px; }
@@ -503,66 +605,119 @@ body.popup { width: 360px; padding: 0; background-size: 24px 24px; }
 .popup .foot .switch { white-space: nowrap; }
 
 /* ==================================================================================== */
-/* TRACKER (THEATER)                                                                    */
+/* TRACKER                                                                              */
+/* Same shell as the War Room (see SHELL above), same table language: dense rows,       */
+/* small dim column heads, mono ids and dates, status as a coloured code, hairlines.    */
 /* ==================================================================================== */
-.tracker main { max-width: 1320px; margin: 0 auto; padding: 0 20px 60px; }
-.tracker .killsheet { margin: 0 0 18px; }
-.tracker .stages { align-items: flex-end; border-top: 0; padding-top: 2px; }
-.tracker .stage dd { font-size: 32px; }
-.tracker .stage-aside { margin-left: auto; align-self: flex-end; padding-bottom: 4px; }
-.tracker .add { margin-bottom: 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: start; }
-.tracker .add .label { grid-column: 1 / -1; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.tracker .add .label .muted { letter-spacing: 0; font-family: var(--font-body); font-weight: 400; font-size: 12px; }
-.tracker .add textarea { height: 76px; font-family: var(--font-mono); font-size: 12.5px; }
-.tracker .add .btns { display: flex; flex-direction: column; gap: 6px; min-width: 210px; }
-@media (max-width: 720px) { .tracker .add { grid-template-columns: 1fr; } .tracker .add .btns { flex-direction: row; flex-wrap: wrap; } }
-.tracker #intel-feed:not(:empty) { margin-bottom: 18px; }
-.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-.toolbar input, .toolbar select { width: auto; min-height: 32px; padding-top: 6px; padding-bottom: 6px; }
-.toolbar select { font-family: var(--font-head); font-size: 14px; font-weight: 600; letter-spacing: 0.03em; }
-.toolbar #q { flex: 1 1 240px; max-width: 380px; }
-.toolbar .spacer { flex: 1; }
+.tracker main { max-width: 1600px; margin: 0 auto; padding: 0 16px 28px; }
+.tracker .stages { gap: 6px 26px; }
+.tracker .stage-aside { margin-left: auto; align-self: flex-end; padding-bottom: 3px; }
+.tracker .listing { margin-top: 14px; }
+.tracker .shell-sec-head input, .tracker .shell-sec-head select { width: auto; height: 30px; min-height: 0; padding-top: 0; padding-bottom: 0; }
+.tracker .shell-sec-head select { font-family: var(--font-head); font-size: 14px; font-weight: 600; letter-spacing: 0.03em; }
+.tracker .shell-sec-head #q { flex: 1 1 200px; max-width: 320px; }
+.tracker .seg button { min-height: 28px; height: 28px; padding: 0 11px; font-size: 13.5px; }
 
-.scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--panel); }
-.tracker table { width: 100%; border-collapse: collapse; min-width: 900px; }
+/* Add targets: closed by default, one panel when opened. */
+.tracker .add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 340px); gap: 10px 16px; align-items: start; margin: 0 0 12px; padding: 10px 0 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.tracker .add[hidden] { display: none; }
+.tracker .add textarea { height: 78px; font-family: var(--font-mono); font-size: 12.5px; }
+.tracker .add-side { display: flex; flex-direction: column; gap: 8px; }
+.tracker .add .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.tracker .add .btns button { min-height: 30px; padding: 0 11px; }
+@media (max-width: 720px) { .tracker .add { grid-template-columns: 1fr; } }
+.tracker #intel-feed { margin-top: 22px; }
+.tracker #intel-feed:empty { display: none; }
+
+/* Table */
+.tracker .scroll { overflow-x: auto; }
+.tracker table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 1200px; }
 .tracker th {
   text-align: left;
   font-family: var(--font-head);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  padding: 9px 10px;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  height: 26px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--line-2);
-  background: var(--panel);
-  position: sticky;
-  top: 0;
+  white-space: nowrap;
 }
-.tracker td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
-.tracker tbody tr { transition: background-color 0.12s; }
-.tracker tbody tr:hover { background: rgba(241, 237, 228, 0.03); }
-.tracker tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
-.tracker tbody tr:last-child td { border-bottom: 0; }
-.tracker td .tgt { font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--track); color: var(--muted); margin-bottom: 2px; }
-.tracker td .title { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
-.tracker td .title a { color: var(--fg); text-decoration: none; }
-.tracker td .title a:hover { color: var(--accent); text-decoration: underline; }
-.tracker td .where { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
-.tracker td.date, .tracker td.src { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-2); white-space: nowrap; }
-.tracker td.src { color: var(--muted); }
-.tracker td select.pill { width: auto; field-sizing: content; min-height: 0; font-size: 10px; padding: 3px 24px 3px 7px; background-position: right 7px center; background-color: transparent; cursor: pointer; }
-.tracker td .row button.danger { color: var(--muted); border-color: var(--line-2); }
-.tracker td .row button.danger:hover { color: var(--danger); border-color: var(--danger); }
-.tracker td select.pill:focus { box-shadow: none; outline: 2px solid var(--accent); outline-offset: 1px; }
-.tracker td .ai { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--cyan); margin-top: 5px; }
-.tracker td textarea { min-height: 34px; height: 34px; font-size: 12px; padding: 6px 8px; background: transparent; border-color: var(--line); }
+.tracker td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 13px; height: 40px; min-width: 0; }
+.tracker th.c-tgt { width: 84px; }
+.tracker th.c-status { width: 150px; }
+.tracker th.c-date { width: 72px; }
+.tracker th.c-src { width: 110px; }
+.tracker th.c-notes { width: 240px; }
+.tracker th.c-act { width: 180px; }
+.tracker th.c-go { width: 156px; }
+.tracker tbody tr:hover td { background: rgba(241, 237, 228, 0.025); }
+.tracker td.tgt { font: 12px var(--font-mono); color: var(--faint); white-space: nowrap; }
+.tracker td.job { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tracker td.job .co { font-weight: 600; font-size: 13.5px; margin-right: 8px; }
+.tracker td.job .ro, .tracker td.job .ro a { color: var(--muted); text-decoration: none; }
+.tracker td.job .ro a:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.tracker td.date, .tracker td.src { font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tracker td.date { color: var(--fg-2); }
+.tracker td.src { color: var(--faint); }
+
+/* Status: a coloured mono code. The select stays a select, but wears no box. */
+.tracker td select.pill {
+  width: auto;
+  field-sizing: content; /* Firefox sizes a select to its longest option; the column is wide enough for that */
+  min-width: 0;
+  min-height: 0;
+  height: 24px;
+  padding: 0 22px 0 6px;
+  border: 1px solid transparent;
+  background-color: transparent;
+  background-position: right 6px center;
+  font: 500 11.5px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.tracker td select.pill:hover { border-color: var(--line-2); }
+.tracker td select.pill:focus { box-shadow: none; outline: 1px solid var(--fg); outline-offset: 1px; }
+.tracker td select.pill.s-queued { border: 1px dashed var(--line-2); }
+.tracker td.job .ai { font: 10px var(--font-mono); letter-spacing: 0.06em; color: var(--cyan); margin-left: 8px; }
+.tracker td.stat { white-space: nowrap; }
+.tracker td textarea { display: block; min-height: 28px; height: 28px; font-size: 12px; line-height: 1.35; padding: 5px 7px; background: transparent; border-color: transparent; resize: none; overflow: hidden; }
 .tracker td textarea:hover { border-color: var(--line-2); }
-.tracker td textarea:focus { background: var(--well); height: 72px; }
-.tracker td .row button { min-height: 26px; padding: 4px 8px; font-size: 10px; }
-.tracker td.empty { padding: 36px 10px; text-align: center; font-size: 13px; }
+.tracker td textarea:focus { background: var(--well); height: 72px; overflow: auto; position: relative; z-index: 2; }
+.tracker td textarea:not(:focus) { white-space: nowrap; text-overflow: ellipsis; }
+.tracker td.go .row { flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
+.tracker td.go button { min-height: 24px; height: 24px; padding: 0 8px; font-size: 12.5px; }
+.tracker td.go button.danger { color: var(--muted); border-color: var(--line-2); }
+.tracker td.go button.danger:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+.tracker td.go .quiet { opacity: 0; }
+.tracker tr:hover td.go .quiet, .tracker tr:focus-within td.go .quiet, .tracker tr.sel td.go .quiet { opacity: 1; }
+.tracker td.empty { padding: 36px 8px; height: auto; text-align: left; font-size: 13px; }
 .log { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); max-width: 280px; padding: 2px 0; border-top: 1px solid var(--line); }
 details summary { cursor: pointer; font-size: 12px; color: var(--fg-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-details summary::marker { color: var(--accent); }
+details summary::marker { color: var(--faint); }
+.tracker td details { position: relative; }
+.tracker td details[open] { z-index: 2; }
+.tracker td details[open] > .log:first-of-type { margin-top: 4px; }
+
+/* The selected row wears corner brackets (first and last cell). Not .locked: that one draws an overlay. */
+.tracker tr.sel { --bc: var(--fg); }
+.tracker tr.sel td { background-color: rgba(241, 237, 228, 0.04); }
+.tracker tr.sel td:first-child {
+  background-image:
+    linear-gradient(var(--bc), var(--bc)), linear-gradient(var(--bc), var(--bc)), linear-gradient(var(--bc), var(--bc)), linear-gradient(var(--bc), var(--bc));
+  background-size: var(--bk) 1.5px, 1.5px var(--bk), var(--bk) 1.5px, 1.5px var(--bk);
+  background-position: left top, left top, left bottom, left bottom;
+  background-repeat: no-repeat;
+}
+.tracker tr.sel td:last-child {
+  background-image:
+    linear-gradient(var(--bc), var(--bc)), linear-gradient(var(--bc), var(--bc)), linear-gradient(var(--bc), var(--bc)), linear-gradient(var(--bc), var(--bc));
+  background-size: var(--bk) 1.5px, 1.5px var(--bk), var(--bk) 1.5px, 1.5px var(--bk);
+  background-position: right top, right top, right bottom, right bottom;
+  background-repeat: no-repeat;
+}
 
 /* Board view: columns separated by spacing, one box per card. Empty columns
    collapse to a thin rail so the eye goes where the work is. */
@@ -571,16 +726,16 @@ details summary::marker { color: var(--accent); }
 .bcol[data-tone="ok"] { border-top-color: var(--ok); }
 .bcol[data-tone="warn"] { border-top-color: var(--warn); }
 .bcol[data-tone="advisory"] { border-top-color: var(--cyan); }
-.bcol[data-tone="status"] { border-top-color: var(--fg-2); }
+.bcol[data-tone="status"] { border-top-color: var(--fg); }
 .bcol > header { display: flex; align-items: baseline; gap: 8px; padding: 8px 0 8px; }
-.bcol > header .t { font-family: var(--font-head); font-size: 15px; font-weight: 600; letter-spacing: 0.04em; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bcol > header .t { font-family: var(--font-head); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bcol > header .n { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 .bcol .cards { display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .bcol.over { background: var(--accent-soft); }
 .bcol.nodrop.dragging { opacity: 0.45; }
 .bcol.rail { flex: 0 0 34px; min-width: 34px; cursor: default; }
 .bcol.rail > header { flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; }
-.bcol.rail > header .t { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 13px; color: var(--muted); }
+.bcol.rail > header .t { writing-mode: vertical-rl; transform: rotate(180deg); }
 .bcol.rail > header .n { margin: 0; order: -1; }
 .bcol.rail .cards { display: none; }
 .bcol.rail.toggle { cursor: pointer; }
@@ -589,17 +744,20 @@ details summary::marker { color: var(--accent); }
 .bcard { position: relative; border: 1px solid var(--line); background: var(--panel); padding: 10px 11px; cursor: grab; transition: border-color 0.12s; min-width: 0; }
 .bcard:hover, .bcard:focus-visible { border-color: var(--bracket); }
 .bcard.dragging { opacity: 0.4; }
+.bcard.locked { border-color: var(--line-2); --bc: var(--fg); }
 .bcard .top { display: flex; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
 .bcard .top .tgt { color: var(--fg-2); flex: none; }
 .bcard .top span:last-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.bcard .co { font-size: 12.5px; color: var(--fg-2); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bcard .ti { font-size: 13.5px; font-weight: 600; line-height: 1.3; margin-top: 1px; overflow-wrap: anywhere; }
-.bcard .ti a { color: var(--fg); text-decoration: none; }
-.bcard .ti a:hover { color: var(--accent); }
+.bcard .co { font-size: 13.5px; font-weight: 600; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bcard .ti { font-size: 12.5px; line-height: 1.3; margin-top: 1px; overflow-wrap: anywhere; }
+.bcard .ti a { color: var(--muted); text-decoration: none; }
+.bcard .ti a:hover { color: var(--fg); }
 .bcard .meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
 .bcard .meta .pill { font-size: 9.5px; padding: 1px 5px; letter-spacing: 0.06em; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bcard .meta .when { margin-left: auto; flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 .bcard .go { margin-top: 8px; width: 100%; min-height: 26px; padding: 3px 6px; font-size: 13px; }
+
+.shell .toast { bottom: 36px; }
 
 /* ==================================================================================== */
 /* OPTIONS (LOADOUT)                                                                    */

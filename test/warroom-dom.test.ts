@@ -62,8 +62,10 @@ describe("War Room track row", () => {
     expect(view.el.textContent).toContain("Acme <b>Robotics</b>");
     expect(view.el.textContent).toContain("ALPHA");
     expect(view.el.textContent).toContain("TGT-0042");
-    expect(view.el.textContent).toContain("OPERATOR INPUT REQUIRED");
-    expect(view.el.textContent).toMatch(/HOLD 01:0\d/);
+    // Status and timer live on the row only; the panel carries just the message and actions.
+    expect(view.el.querySelector(".c-status")!.textContent).toBe("HOLD");
+    expect(view.el.querySelector(".c-hold")!.textContent).toMatch(/^01:0\d$/);
+    expect(view.el.querySelector(".operator")!.textContent).not.toMatch(/HOLD|OPERATOR|QUERY|01:0/);
     expect(view.el.dataset.phase).toBe("holding");
   });
 
@@ -100,7 +102,8 @@ describe("War Room track row", () => {
   it("puts a guarded release switch on review_submit", () => {
     view.update(model([need({ kind: "review_submit", prompt: "Everything is filled" })]), 3, "TGT-0042", Date.now(), true, false);
     expect(view.el.dataset.ready).toBe("true");
-    expect(view.el.textContent).toContain("READY FOR RELEASE");
+    expect(view.el.querySelector(".c-status")!.textContent).toBe("READY");
+    expect(view.el.querySelector(".operator")!.textContent).not.toMatch(/READY|OPEN/); // one OPEN TAB, on the row
     const g = view.el.querySelector<HTMLElement>(".guarded")!;
     expect(g.dataset.state).toBe("closed");
     expect(g.querySelector(".guard-cover")!.textContent).toBe("LIFT GUARD");

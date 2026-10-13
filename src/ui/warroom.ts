@@ -12,7 +12,8 @@ import type { ToPages } from "../shared/messages";
 import type { Job, Need, OpsEvent, Settings, UnitState } from "../shared/types";
 import { callsigns } from "./board";
 import { $, h, pad, send, toast } from "./common";
-import { appliedCount, stageCounts, stageStrip, STAGES, stageOf } from "./stages";
+import { MasterCaution } from "./caution";
+import { appliedCount, stageCounts, stageStrip, stageOf } from "./stages";
 import { OpsLog } from "./warroom/log";
 import { type MapPoint, UsMap } from "./warroom/map";
 import { afkStartFromOps, clampUnits, clock, deriveTiles, rankFor, type Sitrep, SlotMap, span, stopwatch, type TileModel } from "./warroom/model";
@@ -28,7 +29,6 @@ let needs: Need[] = [];
 const units = new Map<string, UnitState>();
 let afkSince: number | null = null;
 let linkUp = true;
-let seenNeeds: Set<string> | null = null;
 let shown = new Set<string>();
 /** Latest ops events (for the AFK-start fallback). */
 let recentOps: OpsEvent[] = [];
@@ -41,6 +41,10 @@ let signs = new Map<string, number>();
 /** The locked unit (corner brackets). */
 let selected: string | null = null;
 let lastList: TileModel[] = [];
+/** Jobs the map filtered the table down to, and the text filter. */
+let mapFilter: Set<string> | null = null;
+let textFilter = "";
+let lastRank: number | null = null;
 
 const t: T = (key, vars) => copy(settings, key, vars);
 const chud = () => settings.ui.chud;
@@ -74,18 +78,19 @@ const el = {
   afkPip: $("#wr-afk-pip"),
   afkStrip: $("#wr-afk-strip"),
   caution: $<HTMLButtonElement>("#wr-caution"),
-  cautionN: $("#wr-caution-n"),
   afk: $<HTMLButtonElement>("#wr-afk"),
   unitsOut: $("#wr-units"),
   unitsDec: $<HTMLButtonElement>("#wr-units-dec"),
   unitsInc: $<HTMLButtonElement>("#wr-units-inc"),
   pause: $<HTMLButtonElement>("#wr-pause"),
+  pauseLabel: $("#wr-pause-label"),
+  insignia: $("#wr-insignia"),
+  filter: $<HTMLInputElement>("#wr-filter"),
+  filterChip: $<HTMLButtonElement>("#wr-filter-chip"),
   sound: $<HTMLButtonElement>("#wr-sound"),
   layerMap: $<HTMLButtonElement>("#wr-layer-map"),
   fs: $<HTMLButtonElement>("#wr-fs"),
   stages: $("#wr-stages"),
-  rank: $("#wr-rank"),
-  rankNext: $("#wr-rank-next"),
   table: $("#wr-tracks"),
   list: $("#wr-track-list"),
   empty: $("#wr-empty"),
@@ -104,9 +109,19 @@ const usMap = new UsMap(() => ({
   remote: (n) => t("warroom.map.remote", { n }),
   unplaced: (n) => t("warroom.map.unplaced", { n }),
   empty: t("warroom.map.empty"),
+  stage: (id) => t(`stage.${id}` as CopyKey),
+  failed: t("status.failed"),
+  clear: t("warroom.filter.clear"),
 }));
 el.map.append(usMap.el);
-usMap.onSelect = (jobId) => select(jobId, true);
+// Clicking a place on the map filters the track table to the jobs there.
+usMap.onFilter = (ids) => {
+  mapFilter = ids ? new Set(ids) : null;
+  render();
+};
+
+// Master caution: pressing it acknowledges (the lamp goes dark, rows stay amber) and jumps to the oldest hold.
+const caution = new MasterCaution(el.caution, () => jumpToHold());
 
 // ---------------------------------------------------------------------------
 // copy (static labels carry data-copy="warroom.key")
@@ -146,8 +161,16 @@ function render(): void {
   lastList = list;
   if (selected && !list.some((m) => m.jobId === selected) && !jobs.some((j) => j.id === selected)) selected = null;
   const slotMap = slots.assign(list.map((m) => m.jobId));
-  renderTracks(list, slotMap, now);
+  const q = textFilter.trim().toLowerCase();
+  const visible = list.filter((m) => (!mapFilter || mapFilter.has(m.jobId)) && (!q || `${companyName(m)} ${m.title} ${m.location}`.toLowerCase().includes(q)));
+  renderTracks(visible, slotMap, now);
+  const filtered = visible.length !== list.length || !!mapFilter;
+  el.filterChip.hidden = !filtered;
+  if (filtered) el.filterChip.textContent = t("warroom.filter.on", { n: visible.length });
   shown = new Set(list.map((m) => m.jobId));
+  // Everything waiting on the operator, oldest first.
+  const holds = [...needs].sort((a, b) => a.createdAt - b.createdAt).map((n) => n.id);
+  if (caution.update(holds) && settings.ui.sound) masterCaution();
 
   renderHeader(now, list);
   renderTotals();
@@ -168,6 +191,9 @@ function renderTracks(list: TileModel[], slotMap: Map<string, number>, now: numb
     let view = tracks.get(m.jobId);
     if (!view) {
       view = new TrackView(m.jobId, { t: () => t, send, drafts, select: (id) => select(id, false) });
+      const id = m.jobId;
+      view.el.addEventListener("mouseenter", () => usMap.highlight(id));
+      view.el.addEventListener("mouseleave", () => usMap.highlight(null));
       tracks.set(m.jobId, view);
     }
     view.update(m, slotMap.get(m.jobId) ?? 0, tgtOf(m.jobId), now, chud(), m.jobId === selected);
@@ -180,8 +206,8 @@ function renderTracks(list: TileModel[], slotMap: Map<string, number>, now: numb
       if (el.list.children[i] !== n) el.list.insertBefore(n, el.list.children[i] ?? null);
     });
   }
-  el.empty.hidden = list.length > 0;
-  el.table.hidden = list.length === 0;
+  el.empty.hidden = list.length > 0 || lastList.length > 0;
+  el.table.hidden = lastList.length === 0;
 }
 
 function renderHeader(now: number, list: TileModel[]): void {
@@ -191,11 +217,7 @@ function renderHeader(now: number, list: TileModel[]): void {
   el.live.dataset.state = !linkUp ? "down" : settings.paused ? "paused" : "live";
   el.live.textContent = !linkUp ? t("warroom.offline") : settings.paused ? t("warroom.paused") : t("warroom.live");
 
-  // Master caution: lit while any unit waits on you.
-  const holds = list.filter((m) => m.needs.length).length;
-  el.caution.dataset.lit = String(holds > 0);
-  el.cautionN.textContent = holds ? t("warroom.caution.count", { n: holds }) : "";
-  el.caution.title = holds ? t("warroom.caution.hint") : t("warroom.caution.clear");
+  el.caution.title = caution.lit ? t("warroom.caution.hint") : t("warroom.caution.clear");
 
   el.afk.setAttribute("aria-pressed", String(settings.afk));
   el.afkPip.hidden = !settings.afk;
@@ -207,9 +229,8 @@ function renderHeader(now: number, list: TileModel[]): void {
   el.unitsOut.textContent = String(clampUnits(settings.concurrency));
   el.unitsDec.disabled = settings.concurrency <= 1;
   el.unitsInc.disabled = settings.concurrency >= 6;
-  el.pause.textContent = settings.paused ? t("warroom.ctl.resume") : t("warroom.ctl.pause");
+  el.pauseLabel.textContent = settings.paused ? t("warroom.ctl.resume") : t("warroom.ctl.pause");
   el.pause.setAttribute("aria-pressed", String(settings.paused));
-  el.sound.textContent = settings.ui.sound ? t("warroom.ctl.sound_on") : t("warroom.ctl.sound_off");
   el.sound.setAttribute("aria-pressed", String(settings.ui.sound));
   el.layerMap.setAttribute("aria-pressed", String(mapOn));
   el.mapPanel.hidden = !mapOn;
@@ -224,19 +245,36 @@ function renderTotals(): void {
   if (sig === totalsSig) return;
   totalsSig = sig;
   el.stages.replaceChildren(stageStrip(counts, (k) => t(k)));
-  el.rank.textContent = t(`warroom.rank.${r.index}` as CopyKey);
-  el.rankNext.textContent = r.next == null ? t("warroom.rank.max") : t("warroom.rank.next", { n: r.toNext, rank: t(`warroom.rank.${r.next}` as CopyKey) });
+  renderInsignia(r);
 }
 
-const STAGE_TONE = Object.fromEntries(STAGES.map((s) => [s.id, s.tone])) as Record<string, MapPoint["tone"]>;
+/** Rank as a chevron insignia beside the operation name; a promotion gets one moment. */
+function renderInsignia(r: ReturnType<typeof rankFor>): void {
+  const name = t(`warroom.rank.${r.index}` as CopyKey);
+  el.insignia.title = r.next == null ? `${name} · ${t("warroom.rank.max")}` : `${name} · ${t("warroom.rank.next", { n: r.toNext, rank: t(`warroom.rank.${r.next}` as CopyKey) })}`;
+  el.insignia.setAttribute("aria-label", name);
+  if (el.insignia.dataset.rank !== String(r.index)) {
+    el.insignia.dataset.rank = String(r.index);
+    const marks = r.index === 0 ? ["dot"] : r.index <= 4 ? Array(r.index).fill("chev") : r.index <= 6 ? Array(r.index - 4).fill("bar") : Array(r.index - 6).fill("star");
+    el.insignia.replaceChildren(...marks.map((k) => h("i", { className: `ins ${k}` })));
+  }
+  if (lastRank != null && r.index > lastRank) {
+    toast(t("warroom.promoted", { rank: name }));
+    el.insignia.classList.remove("promoted");
+    void el.insignia.offsetWidth;
+    el.insignia.classList.add("promoted");
+  }
+  lastRank = r.index;
+}
+
 function renderMap(): void {
   usMap.update(
-    jobs.map((j) => ({
+    jobs.map((j): MapPoint => ({
       jobId: j.id,
       label: [companyName(j), j.title].filter(Boolean).join(" — ") || j.url,
       location: j.location,
-      tone: j.status === "failed" ? "alert" : STAGE_TONE[stageOf(j.status)] ?? "status",
-      queued: j.status === "queued" || j.status === "saved",
+      stage: stageOf(j.status),
+      failed: j.status === "failed",
     })),
   );
   usMap.select(selected);
@@ -251,16 +289,101 @@ function select(jobId: string | null, scroll: boolean): void {
   if (scroll && jobId) tracks.get(jobId)?.el.scrollIntoView({ block: "nearest" });
 }
 
-/** Cycle the lock through units waiting on you, oldest hold first. */
-function nextCaution(): void {
+/** Lock onto the next unit waiting on you (oldest hold first), cycling on repeat presses. */
+function jumpToHold(): void {
   const holds = lastList.filter((m) => m.needs.length).sort((a, b) => (a.holdingSince ?? 0) - (b.holdingSince ?? 0));
   if (!holds.length) return;
+  if (mapFilter || textFilter) clearFilters();
   const i = holds.findIndex((m) => m.jobId === selected);
   const next = holds[(i + 1) % holds.length]!;
   select(next.jobId, true);
   tracks.get(next.jobId)?.focusOperator();
 }
-el.caution.addEventListener("click", nextCaution);
+
+function clearFilters(): void {
+  mapFilter = null;
+  textFilter = "";
+  el.filter.value = "";
+  usMap.clearFilter();
+  render();
+}
+el.filterChip.addEventListener("click", clearFilters);
+el.filter.addEventListener("input", () => {
+  textFilter = el.filter.value;
+  render();
+});
+
+/** Rows currently on screen, in order (for J/K). */
+const visibleIds = () => [...el.list.children].map((n) => (n as HTMLElement).dataset.job!).filter(Boolean);
+
+// Keyboard-first operation.
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const target = e.target as HTMLElement;
+  const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+  if (e.key === "Escape") {
+    if (!el.modal.hidden) return; // the modal handles its own Esc
+    if (caution.lit) caution.press();
+    else if (typing && target === el.filter) {
+      clearFilters();
+      el.filter.blur();
+    } else if (mapFilter || textFilter) clearFilters();
+    else if (selected) select(null, false);
+    return;
+  }
+  if (typing || target.closest(".guarded, .menu")) return;
+  const ids = visibleIds();
+  const move = (d: number) => {
+    if (!ids.length) return;
+    const i = selected ? ids.indexOf(selected) : -1;
+    select(ids[Math.max(0, Math.min(ids.length - 1, i < 0 ? 0 : i + d))]!, true);
+    tracks.get(selected!)?.el.querySelector<HTMLElement>(".track-row")?.focus({ preventScroll: true });
+  };
+  const view = selected ? tracks.get(selected) : undefined;
+  switch (e.key) {
+    case "j":
+    case "ArrowDown":
+      if (e.key === "ArrowDown" && !target.closest(".track-row")) return;
+      e.preventDefault();
+      move(1);
+      break;
+    case "k":
+    case "ArrowUp":
+      if (e.key === "ArrowUp" && !target.closest(".track-row")) return;
+      e.preventDefault();
+      move(-1);
+      break;
+    case "Enter":
+      if (!view) return;
+      e.preventDefault();
+      view.expanded = !view.expanded;
+      render();
+      break;
+    case "o":
+      if (selected) void send({ type: "focusJob", jobId: selected });
+      break;
+    case " ":
+      // Space on a unit that's ready: lift its guard; the switch takes focus, hold Space again to release.
+      if (view?.liftGuard()) e.preventDefault();
+      break;
+    case "/":
+      e.preventDefault();
+      el.filter.focus();
+      break;
+    case "a":
+      el.afk.click();
+      break;
+    case "s":
+      el.sound.click();
+      break;
+    case "m":
+      el.layerMap.click();
+      break;
+    case "p":
+      el.pause.click();
+      break;
+  }
+});
 
 // ---------------------------------------------------------------------------
 // data in
@@ -276,16 +399,6 @@ function mergeUnits(list: UnitState[]): void {
 }
 
 function onNeeds(next: Need[]): void {
-  if (seenNeeds) {
-    const fresh = next.filter((n) => !seenNeeds!.has(n.id));
-    if (fresh.length) {
-      if (settings.ui.sound) masterCaution();
-      el.caution.classList.remove("flash");
-      void el.caution.offsetWidth;
-      el.caution.classList.add("flash");
-    }
-  }
-  seenNeeds = new Set(next.map((n) => n.id));
   needs = next;
 }
 
@@ -498,7 +611,7 @@ document.addEventListener("keydown", (e) => {
   if (!el.modal.hidden) {
     el.modal.hidden = true;
     el.modal.replaceChildren();
-  } else if (selected && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) select(null, false);
+  }
 });
 
 // ---------------------------------------------------------------------------

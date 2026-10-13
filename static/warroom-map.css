@@ -1,28 +1,54 @@
-/* War Room map layer. Scoped under .wr .usmap; hairlines, no glow, no animation. */
+/* War Room map layer. Scoped under .wr .usmap; hairlines, no glow, no animation.
+   Symbol colours are the stats-row colours: white status, amber hold, cyan contact,
+   green secured (only), dim lost, red failed. */
 .wr .usmap { margin: 0; display: grid; gap: 6px; }
-.wr .usmap svg { display: block; width: 100%; height: auto; }
+.wr .usmap > svg { display: block; width: 100%; height: auto; }
 .wr .usmap .land { fill: rgba(241, 237, 228, 0.035); stroke: none; }
 .wr .usmap .borders { fill: none; stroke: var(--wr-line, #262522); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .wr .usmap .coast { fill: none; stroke: var(--wr-line-2, #353330); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.wr .usmap .pt { --c: var(--wr-bone, #f1ede4); cursor: pointer; outline: none; }
-.wr .usmap .t-ok { --c: var(--wr-ok, #86c095); }
-.wr .usmap .t-warn { --c: var(--wr-warn, #dcae5e); }
-.wr .usmap .t-alert { --c: var(--wr-alert, #ec5f48); }
-.wr .usmap .t-advisory { --c: var(--wr-cyan, #6fb3c4); }
-.wr .usmap .t-status { --c: var(--wr-bone, #f1ede4); }
-.wr .usmap .t-dim { --c: var(--wr-dim, #7f7c75); }
+
+.wr .usmap .s-targets, .wr .usmap .s-engaged, .wr .usmap .s-splash { --c: var(--wr-bone, #f1ede4); }
+.wr .usmap .s-hold { --c: var(--wr-warn, #dcae5e); }
+.wr .usmap .s-contact { --c: var(--wr-cyan, #6fb3c4); }
+.wr .usmap .s-secured { --c: var(--wr-ok, #86c095); }
+.wr .usmap .s-lost { --c: var(--wr-dim, #7f7c75); }
+.wr .usmap .s-failed { --c: var(--wr-alert, #ec5f48); }
+
+.wr .usmap .pt { cursor: pointer; outline: none; }
 .wr .usmap .hit { fill: transparent; }
-.wr .usmap .dot { fill: var(--c); stroke: var(--wr-bg, #0c0c0b); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.wr .usmap .q .dot { fill: none; stroke: var(--c); stroke-width: 1.25; }
-.wr .usmap .pt:focus-visible .dot { stroke: var(--wr-bone, #f1ede4); }
+.wr .usmap .fr { fill: var(--wr-bg, #0c0c0b); stroke: var(--c); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
+.wr .usmap .fr.dashed { stroke-dasharray: 3 2; }
+.wr .usmap .fr.solid { fill: var(--c); }
+.wr .usmap .x { fill: none; stroke: var(--c); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
+.wr .usmap .pt:focus-visible .fr { stroke: var(--wr-bone, #f1ede4); stroke-width: 2; }
+.wr .usmap.filtering .pt:not(.flt) .sym { opacity: 0.4; }
 .wr .usmap .count {
-  fill: var(--wr-muted, #a19d94); font: 600 12px var(--wr-mono, ui-monospace, monospace);
+  fill: var(--wr-muted, #a19d94); font: 600 10px var(--wr-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; pointer-events: none;
+  paint-order: stroke; stroke: var(--wr-bg, #0c0c0b); stroke-width: 3px; stroke-linejoin: round;
 }
-.wr .usmap .reticle { fill: none; stroke: var(--wr-bone, #f1ede4); stroke-width: 1.25; vector-effect: non-scaling-stroke; pointer-events: none; }
+
+/* The only bracket use on the map: the locked / hovered place, and the filtered one. */
+.wr .usmap .reticle path, .wr .usmap .reticle-flt path {
+  fill: none; stroke: var(--wr-bone, #f1ede4); stroke-width: 1.25; vector-effect: non-scaling-stroke; pointer-events: none;
+}
+.wr .usmap .reticle-flt path { stroke: var(--wr-muted, #a19d94); }
+.wr .usmap .reticle, .wr .usmap .reticle-flt { pointer-events: none; }
+
 .wr .usmap-foot {
-  display: flex; flex-wrap: wrap; gap: 4px 14px; min-height: 1.2em;
-  font: 11px/1.2 var(--wr-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
-  text-transform: uppercase; letter-spacing: 0.06em; color: var(--wr-dim, #7f7c75);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 3px 11px; min-height: 1.2em;
+  font: 10.5px/1.2 var(--wr-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
+  text-transform: uppercase; letter-spacing: 0.03em; color: var(--wr-dim, #7f7c75);
 }
+.wr .usmap-key { display: inline-flex; align-items: center; gap: 3px; color: var(--wr-muted, #a19d94); }
+.wr .usmap-key b { font-weight: 500; color: var(--wr-fg-2, #cdc9c0); }
+.wr .usmap-icon { width: 15px; height: 15px; flex: none; }
+.wr .usmap-icon .fr, .wr .usmap-icon .x { stroke-width: 1.25; vector-effect: none; }
 .wr .usmap-empty { text-transform: none; letter-spacing: 0; font-family: var(--wr-sans, inherit); }
+.wr .usmap-clear {
+  margin-left: auto; padding: 0 2px; border: 0; background: none; cursor: pointer;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--wr-muted, #a19d94);
+}
+.wr .usmap-clear:hover { color: var(--wr-bone, #f1ede4); }
+.wr .usmap-clear:focus-visible { outline: 1px solid var(--wr-bone, #f1ede4); outline-offset: 2px; }
+.wr .usmap-clear[hidden] { display: none; }

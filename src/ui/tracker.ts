@@ -2,15 +2,20 @@ import { extractUrls, jobsToCsv } from "../core/csv";
 import { api } from "../shared/api";
 import { copy, type CopyKey } from "../shared/copy";
 import { normalizeSettings, STORAGE_KEYS } from "../shared/defaults";
-import type { Job, JobStatus, Settings } from "../shared/types";
-import { BOARD_COLUMNS, type BoardColumn, callsigns, dropStatus, groupForBoard } from "./board";
+import type { Job, JobStatus, Need, Settings } from "../shared/types";
+import { BOARD_COLUMNS, type BoardColumn, callsigns, cardBadge, dropStatus, groupForBoard, waitingJobs } from "./board";
+import { MasterCaution } from "./caution";
 import { $, applyCopy, download, h, JOB_STATUSES, pad, send, statusLabel, toast } from "./common";
 import { renderIntelFeed } from "./intelFeed";
 import { appliedCount, stageCounts, stageStrip, STAGES } from "./stages";
-import { companyName } from "../shared/display";
+import { companyName, dtg } from "../shared/display";
 import { openSheetImport } from "./sheetImport";
+import { clock } from "./warroom/model";
 
 let jobs: Job[] = [];
+let needs: Need[] = [];
+/** The job the caution lamp (or a click) selected; it wears corner brackets. */
+let selectedId: string | null = null;
 let settings: Settings = normalizeSettings(undefined);
 let editing = false;
 let dragging: string | null = null;
@@ -37,6 +42,7 @@ const pref = {
     }
   },
 };
+// Table is the default; the board is a remembered choice.
 let view: "table" | "board" = pref.get("aim.tracker.view") === "board" ? "board" : "table";
 let lostOpen = pref.get("aim.board.lostOpen") === "1";
 
@@ -58,11 +64,14 @@ function statusSelect(j: Job): HTMLSelectElement {
 }
 
 function jobLink(j: Job): HTMLElement {
-  const text = j.title || j.url.replace(/^https?:\/\//, "").slice(0, 60) || j.company || "Untitled";
+  // No role title: show the path of the link rather than repeating the host (which is the company).
+  const text = j.title || j.url.replace(/^https?:\/\/[^/]*/, "").slice(0, 60) || j.url.replace(/^https?:\/\//, "").slice(0, 60) || j.company || "Untitled";
   // Spreadsheet rows may have no link; only real web links become anchors.
   if (!/^https?:\/\//i.test(j.url)) return h("span", { textContent: text });
   return h("a", { href: j.url, target: "_blank", rel: "noopener", textContent: text });
 }
+
+const WAITING: JobStatus[] = ["needs_you", "ready_to_submit"];
 
 function row(j: Job): HTMLTableRowElement {
   const notes = h("textarea", { value: j.notes, placeholder: "Notes…" });
@@ -79,33 +88,38 @@ function row(j: Job): HTMLTableRowElement {
 
   const actions = h("div", { className: "row" });
   const act = (label: string, fn: () => void, cls = "") => {
-    const b = h("button", { textContent: label, className: cls });
+    const b = h("button", { textContent: label, className: cls, type: "button" });
     b.addEventListener("click", fn);
     actions.append(b);
   };
-  if (["running", "needs_you", "ready_to_submit"].includes(j.status)) act(c("theme.act.go"), () => void send({ type: "focusJob", jobId: j.id }));
+  if (["running", ...WAITING].includes(j.status)) act(c("theme.act.go"), () => void send({ type: "focusJob", jobId: j.id }));
   if (["saved", "failed", "skipped"].includes(j.status)) act(j.status === "saved" ? c("theme.act.start") : c("theme.act.retry"), () => void send({ type: "retryJob", jobId: j.id }));
-  act(c("theme.act.delete"), () => confirm("Delete this job?") && void send({ type: "deleteJobs", jobIds: [j.id] }), "danger");
+  act(c("theme.act.delete"), () => confirm("Delete this job?") && void send({ type: "deleteJobs", jobIds: [j.id] }), "danger quiet");
 
+  const company = companyName(j);
   const tr = h(
     "tr",
-    {},
+    { className: j.id === selectedId ? "sel" : "" },
+    h("td", { className: "tgt", textContent: tgt(j) }),
     h(
       "td",
-      {},
-      h("div", { className: "tgt", textContent: tgt(j) }),
-      h("div", { className: "title" }, jobLink(j)),
-      h("div", { className: "where", textContent: [companyName(j), j.location].filter(Boolean).join(" · ") }),
+      { className: "job", title: [company, j.title, j.location].filter(Boolean).join(" · ") },
+      h("span", { className: "co", textContent: company }),
+      h("span", { className: "ro" }, jobLink(j)),
+      j.aiDrafted ? h("span", { className: "ai", textContent: c("theme.tracker.ai", { n: j.aiDrafted, s: j.aiDrafted === 1 ? "" : "s" }) }) : "",
     ),
-    h("td", {}, statusSelect(j), j.aiDrafted ? h("div", { className: "ai", textContent: c("theme.tracker.ai", { n: j.aiDrafted, s: j.aiDrafted === 1 ? "" : "s" }) }) : ""),
+    h("td", { className: "stat" }, statusSelect(j)),
     h("td", { className: "date", textContent: fmt(j.appliedAt) }),
-    h("td", { className: "src", textContent: j.ats }),
-    h("td", { style: "min-width:180px" }, notes),
-    h("td", {}, activity),
-    h("td", {}, actions),
+    h("td", { className: "src", textContent: j.ats.replace(/^(boards|jobs|careers)\./, ""), title: j.ats }),
+    h("td", { className: "notes" }, notes),
+    h("td", { className: "act" }, activity),
+    h("td", { className: "go" }, actions),
   );
   tr.dataset.jobId = j.id;
   tr.dataset.status = j.status;
+  tr.addEventListener("click", (e) => {
+    if (!(e.target as HTMLElement).closest("a, button, select, textarea, summary, input")) select(j.id);
+  });
   return tr;
 }
 
@@ -122,32 +136,37 @@ function renderRows(): void {
   const list = filtered();
   const body = $("#rows");
   body.replaceChildren(...list.map(row));
-  if (!list.length) body.append(h("tr", {}, h("td", { colSpan: 7, className: "muted empty", textContent: c("theme.tracker.empty") })));
+  if (!list.length) body.append(h("tr", {}, h("td", { colSpan: 8, className: "muted empty", textContent: c("theme.tracker.empty") })));
 }
 
 // --- board view -----------------------------------------------------------------
 
 function boardCard(j: Job): HTMLElement {
+  // The column already names the stage, so a badge appears only for what it doesn't say.
+  const badge = cardBadge(j.status);
   const card = h(
     "article",
-    { className: `bcard`, draggable: true, tabIndex: 0 },
+    { className: `bcard${j.id === selectedId ? " locked" : ""}`, draggable: true, tabIndex: 0 },
     h("div", { className: "top" }, h("span", { className: "tgt", textContent: tgt(j) }), h("span", { textContent: j.ats.replace(/^(boards|jobs|careers)\./, "") })),
     h("div", { className: "co", textContent: companyName(j) || "—" }),
     h("div", { className: "ti" }, jobLink(j)),
     h(
       "div",
       { className: "meta" },
-      h("span", { className: `pill s-${j.status}`, textContent: statusLabel(settings, j.status) }),
+      badge ? h("span", { className: `pill s-${badge}`, textContent: statusLabel(settings, badge) }) : "",
       h("span", { className: "when", textContent: fmt(j.appliedAt ?? j.updatedAt) }),
     ),
   );
   card.dataset.jobId = j.id;
   card.dataset.status = j.status;
-  if (["running", "needs_you", "ready_to_submit"].includes(j.status)) {
+  if (["running", ...WAITING].includes(j.status)) {
     const go = h("button", { className: "go", type: "button", textContent: c("theme.act.go") });
     go.addEventListener("click", () => void send({ type: "focusJob", jobId: j.id }));
     card.append(go);
   }
+  card.addEventListener("click", (e) => {
+    if (!(e.target as HTMLElement).closest("a, button")) select(j.id);
+  });
   card.addEventListener("dragstart", (e) => {
     dragging = j.id;
     e.dataTransfer?.setData("text/plain", j.id);
@@ -222,6 +241,48 @@ function renderView(): void {
   else renderBoard();
 }
 
+// --- selection + master caution --------------------------------------------------------
+
+/** Mark one job as selected (corner brackets) in whichever view is showing. */
+function select(id: string | null, scroll = false): void {
+  selectedId = id;
+  for (const tr of document.querySelectorAll<HTMLElement>("#rows tr[data-job-id]")) tr.classList.toggle("sel", tr.dataset.jobId === id);
+  for (const card of document.querySelectorAll<HTMLElement>("#board .bcard")) card.classList.toggle("locked", card.dataset.jobId === id);
+  if (!id || !scroll) return;
+  const root = view === "table" ? $("#rows") : $("#board");
+  const el = [...root.querySelectorAll<HTMLElement>("[data-job-id]")].find((n) => n.dataset.jobId === id);
+  el?.scrollIntoView({ block: "center", behavior: "auto" });
+}
+
+/** Pressing the lamp acknowledges, then selects and scrolls to the oldest job waiting on you. */
+function gotoOldestWaiting(): void {
+  const id = waitingJobs(needs, jobs).jobIds[0];
+  if (!id) return;
+  // A filter or search may hide it: clear them so the job is on screen.
+  if (!filtered().some((j) => j.id === id)) {
+    $<HTMLInputElement>("#q").value = "";
+    $<HTMLSelectElement>("#filter").value = "all";
+  }
+  selectedId = id;
+  renderView();
+  select(id, true);
+}
+
+const caution = new MasterCaution($<HTMLButtonElement>("#caution"), gotoOldestWaiting);
+
+function renderCaution(): void {
+  const { needIds, jobIds } = waitingJobs(needs, jobs);
+  caution.update(needIds);
+  $("#caution").title = jobIds.length ? c("theme.tracker.caution.hint") : c("warroom.caution.clear");
+}
+
+function tick(): void {
+  const now = Date.now();
+  const t = $("#clock");
+  t.textContent = settings.ui.chud ? dtg(now) : clock(now).slice(0, 5);
+  t.setAttribute("datetime", new Date(now).toISOString());
+}
+
 function renderFilter(): void {
   const filter = $<HTMLSelectElement>("#filter");
   const cur = filter.value || "all";
@@ -231,15 +292,18 @@ function renderFilter(): void {
 }
 
 async function load(): Promise<void> {
-  const raw = (await api.storage.local.get([STORAGE_KEYS.jobs, STORAGE_KEYS.settings])) as { jobs?: Job[]; settings?: unknown };
+  const raw = (await api.storage.local.get([STORAGE_KEYS.jobs, STORAGE_KEYS.needs, STORAGE_KEYS.settings])) as { jobs?: Job[]; needs?: Need[]; settings?: unknown };
   jobs = raw.jobs ?? [];
+  needs = raw.needs ?? [];
   signs = callsigns(jobs);
   const prevChud = settings.ui.chud;
   settings = normalizeSettings(raw.settings);
   applyCopy(settings);
   if (prevChud !== settings.ui.chud || !$<HTMLSelectElement>("#filter").options.length) renderFilter();
   $("#pause").textContent = settings.paused ? c("theme.resume") : c("theme.pause");
-  $("#pause").classList.toggle("primary", settings.paused);
+  $("#pause").setAttribute("aria-pressed", String(settings.paused));
+  tick();
+  renderCaution();
   renderStats();
   if (!editing && !dragging) renderView();
 }
@@ -257,11 +321,19 @@ $("#view-board").addEventListener("click", () => {
   renderView();
 });
 
+function setAddOpen(open: boolean): void {
+  $("#add").hidden = !open;
+  $("#add-toggle").setAttribute("aria-expanded", String(open));
+  if (open) $<HTMLTextAreaElement>("#urls").focus();
+}
+$("#add-toggle").addEventListener("click", () => setAddOpen($("#add").hidden));
+
 async function add(start: boolean): Promise<void> {
   const urls = extractUrls($<HTMLTextAreaElement>("#urls").value);
   if (!urls.length) return toast(c("theme.toast.noUrls"));
   const n = await send<number>({ type: "addJobs", urls, start });
   $<HTMLTextAreaElement>("#urls").value = "";
+  setAddOpen(false);
   const k = urls.length - n;
   toast(c(start ? "theme.toast.armed" : "theme.toast.marked", { n, s: n === 1 ? "" : "s", dup: k > 0 ? c("theme.toast.dup", { k }) : "" }));
 }
@@ -276,6 +348,7 @@ $("#clear-done").addEventListener("click", () => {
 });
 $("#import-sheet").addEventListener("click", () => openSheetImport());
 $("#csv").addEventListener("click", () => download(`applications-${new Date().toISOString().slice(0, 10)}.csv`, jobsToCsv(jobs), "text/csv"));
+$("#warroom").addEventListener("click", () => void send({ type: "openWarRoom" }));
 $("#settings").addEventListener("click", () => void api.runtime.openOptionsPage());
 $("#pause").addEventListener("click", async () => {
   const raw = (await api.storage.local.get(STORAGE_KEYS.settings)) as { settings?: unknown };
@@ -289,3 +362,4 @@ api.storage.onChanged.addListener((changes, area) => {
 });
 renderIntelFeed($("#intel-feed"));
 void load();
+setInterval(tick, 10_000);

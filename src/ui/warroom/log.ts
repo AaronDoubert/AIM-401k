@@ -36,6 +36,12 @@ export class OpsLog {
     } catch {
       /* storage blocked */
     }
+    // Panel resizes (map layer toggled, window resized) keep the newest line in view, never half a line.
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(() => {
+        if (!this.unseen) this.scrollToEnd();
+      }).observe(box);
+    }
     box.addEventListener("scroll", () => {
       if (this.atBottom()) this.clearUnseen();
     });
