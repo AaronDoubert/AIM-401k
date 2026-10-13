@@ -9,6 +9,7 @@ import type { UnitState } from "../shared/types";
 import { afkStartFromOps, span, summarizeSitrep, type Sitrep } from "../ui/warroom/model";
 import { ACTIVE, desktopNotify, on, opsLog, register, toPages } from "./core";
 import { getState, mutate } from "./store";
+import { sanitizeFields } from "./unitfields";
 
 const units = new Map<string, UnitState>();
 /** Units whose thumbnail changed since the last broadcast (thumbs are only sent when new). */
@@ -291,7 +292,11 @@ register({
     const keepCounts = !st.fieldsTotal && !!prev && (st.phase === "delivered" || st.phase === "releasing" || st.phase === "recon");
     const total = keepCounts ? prev!.fieldsTotal : Math.max(0, st.fieldsTotal | 0);
     const done = keepCounts ? (st.phase === "delivered" ? prev!.fieldsTotal : prev!.fieldsDone) : Math.max(0, st.fieldsDone | 0);
+    // Same for the checklist: a page that reports none keeps the last one, and delivery never wipes it.
+    const fields = sanitizeFields(st.fields);
+    const keepFields = st.phase === "delivered" || !fields;
     setUnit(job.id, {
+      ...(keepFields ? {} : { fields }),
       phase: st.phase,
       step,
       fieldsTotal: total,

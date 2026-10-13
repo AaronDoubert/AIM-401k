@@ -86,6 +86,7 @@ async function anthropicJson<T>(r: Resolved, s: Settings, task: AiTask<T>): Prom
     if (e instanceof Anthropic.APIConnectionError) throw new AiError(unreachable(r, e));
     if (e instanceof Anthropic.APIError && typeof e.status === "number") {
       const retry = retryAfterSeconds(e.headers?.get?.("retry-after") ?? null);
+      noteQuota(e.status, e.message, r);
       throw new AiError(describeHttpError(e.status, e.message, r, retry));
     }
     throw new AiError(unreachable(r, e));
@@ -115,6 +116,7 @@ async function httpError(res: Response, r: Resolved): Promise<AiError> {
   } catch {
     /* not JSON */
   }
+  noteQuota(res.status, detail.replace(/\s+/g, " ").trim().slice(0, 160), r);
   return new AiError(describeHttpError(res.status, detail, r, retryAfterSeconds(res.headers.get("retry-after"))));
 }
 
@@ -122,6 +124,28 @@ async function httpError(res: Response, r: Resolved): Promise<AiError> {
 // Friendlier failures: one line a person can act on, per common problem.
 
 type Who = Pick<Resolved, "provider" | "model"> & { baseUrl?: string };
+
+/** A 429 whose wording says the day's quota is gone (not just a per-minute limit). */
+export function isDailyQuota(status: number, detail: string): boolean {
+  return status === 429 && /quota|per day|daily|exhausted/i.test(detail);
+}
+
+// The ops log (feed.ts) subscribes here; ai.ts must not import it (core.ts imports ai.ts).
+type QuotaListener = (provider: ProviderId) => void;
+const quotaListeners: QuotaListener[] = [];
+export function onQuotaSpent(fn: QuotaListener): void {
+  quotaListeners.push(fn);
+}
+function noteQuota(status: number, detail: string, r: Who): void {
+  if (!isDailyQuota(status, detail)) return;
+  for (const fn of quotaListeners) {
+    try {
+      fn(r.provider);
+    } catch {
+      /* telemetry only */
+    }
+  }
+}
 
 /** "5 s", "3 min", "2 h". */
 export function humanWait(seconds: number): string {
