@@ -1,8 +1,8 @@
 import { api } from "../shared/api";
 import { MARK_OFFWHITE_SVG } from "../shared/brand";
 import { copy, type CopyKey } from "../shared/copy";
-import type { OverlayState, ToBackground } from "../shared/messages";
-import type { Need } from "../shared/types";
+import type { OverlayState, SpotReply, ToBackground } from "../shared/messages";
+import type { Need, PageMeta } from "../shared/types";
 import { guardedRelease, HOLD_MS } from "../ui/guarded";
 
 // The floating "AIM-401k needs you" box shown on every tab. Lives in a closed
@@ -12,6 +12,14 @@ import { guardedRelease, HOLD_MS } from "../ui/guarded";
 // files, so pages can't probe for the extension). The mark is inlined for the same reason.
 
 const send = (msg: ToBackground): Promise<unknown> => api.runtime.sendMessage(msg);
+
+/** What the Spotter found on this page, and where the card is in its short life. */
+export interface Spot {
+  url: string;
+  meta: PageMeta;
+  reply: SpotReply;
+  phase: "ready" | "engaged" | "saved";
+}
 
 /** Press-and-hold time for "submit for me". */
 export { HOLD_MS };
@@ -71,6 +79,14 @@ const CSS = `
 /* red = true failures only; amber = an operator is needed */
 .k-question, .k-consent, .k-signature, .k-login, .k-captcha, .k-review_submit { --k: var(--warn); }
 .k-stalled, .k-error { --k: var(--danger); }
+/* Spotter card: advisory (cyan). It's an offer, not a demand. */
+.spot .card { --k: var(--info); border-bottom: 0; }
+.spot .head { flex-direction: row; align-items: center; justify-content: space-between; }
+.spot .role { font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--fg); margin: 0 0 3px; word-break: break-word; }
+.spot .where { font-size: 12px; color: var(--muted); margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spot .note { font-size: 12px; color: var(--info); margin: -4px 0 9px; }
+.spot .after { font-size: 13px; color: var(--fg-2); }
+.guarded.unguarded .guard-switch { border-color: var(--fg); color: var(--fg); cursor: pointer; }
 .prompt { font-size: 14px; line-height: 1.4; margin: 2px 0 9px; white-space: pre-wrap; word-break: break-word; color: var(--fg); }
 .detail { font-size: 12px; color: var(--warn); margin: -4px 0 9px; }
 input[type=text], input[type=date], textarea, select { display: block; width: 100%; margin: 0; font: 13px/1.4 var(--sans); padding: 7px 9px; border: 1px solid var(--line-2); border-radius: 0;
@@ -163,6 +179,7 @@ export class Overlay {
   private holding = false;
   private renderPending = false;
   private arrived = false;
+  private spot: Spot | null = null;
 
   constructor() {
     this.host = document.createElement("div");
@@ -178,14 +195,26 @@ export class Overlay {
   }
 
   private c(key: CopyKey, vars?: Record<string, string | number>): string {
-    return copy(this.state?.chud ?? true, key, vars);
+    return copy(this.state?.chud ?? this.spot?.reply.chud ?? true, key, vars);
+  }
+
+  /** Show, update or (null) remove the Spotter card. */
+  setSpot(spot: Spot | null): void {
+    // One panel at a time: a fresh find folds the waiting list back into its pill.
+    if (spot && spot !== this.spot && spot.phase === "ready") this.open = false;
+    this.spot = spot;
+    this.render();
+  }
+
+  get spotted(): Spot | null {
+    return this.spot;
   }
 
   update(state: OverlayState): void {
     this.state = state;
     const n = state.needs.length;
     if (n > this.lastNeedCount) {
-      this.open = true; // new need: pop open
+      this.open = !this.spot; // new need: pop open (unless the Spotter card is up)
       this.arrived = true;
     }
     if (n === 0 && this.lastNeedCount > 0) this.open = false;
@@ -204,8 +233,9 @@ export class Overlay {
     if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
 
     this.wrap.replaceChildren();
+    this.wrap.classList.toggle("chud", (s?.chud ?? this.spot?.reply.chud) !== false);
+    if (this.spot) this.wrap.append(this.spotCard(this.spot));
     if (!s) return;
-    this.wrap.classList.toggle("chud", s.chud !== false);
     const n = s.needs.length;
     if (n === 0 && s.running === 0 && s.queued === 0) return;
 
@@ -327,6 +357,65 @@ export class Overlay {
     actions.append(button(this.c("theme.ov.skip"), () => void send({ type: "skipJob", jobId: need.jobId }), "link"));
     card.append(actions);
     return card;
+  }
+
+  /** "Target acquired": the posting's role and company, hold to engage, or track it for later. */
+  private spotCard(sp: Spot): HTMLElement {
+    const { meta, reply } = sp;
+    const close = button("×", () => this.setSpot(null), "icon link");
+    close.setAttribute("aria-label", this.c("theme.spot.dismiss"));
+    close.title = this.c("theme.spot.dismiss");
+    const head = el("div", { className: "head" }, el("b", {}, mark(), this.c("theme.spot.head")), close);
+    const card = el(
+      "div",
+      { className: "card" },
+      el("div", { className: "role", textContent: meta.title || this.c("theme.spot.untitled") }),
+      el("div", { className: "where", textContent: [meta.company, meta.location].filter(Boolean).join(" · ") }),
+    );
+    const known = reply.known;
+    const applied = known && ["submitted", "interviewing", "offer", "rejected"].includes(known.status);
+    if (sp.phase === "engaged") card.append(el("div", { className: "after", textContent: this.c("theme.spot.next") }));
+    else if (sp.phase === "saved") card.append(el("div", { className: "after", textContent: this.c("theme.spot.saved") }));
+    else if (applied) {
+      const date = known.appliedAt ? new Date(known.appliedAt).toLocaleDateString([], { day: "numeric", month: "short" }) : "";
+      card.append(el("div", { className: "note", textContent: this.c("theme.spot.applied", { date }).replace(/\s+\./, ".") }));
+      card.append(el("div", { className: "row" }, button(this.c("theme.spot.dismiss"), () => this.setSpot(null), "link")));
+    } else {
+      if (known?.elsewhere) card.append(el("div", { className: "note", textContent: this.c("theme.spot.active") }));
+      const hold = guardedRelease({
+        guard: false,
+        labels: { guard: "", hold: this.c("theme.spot.hold"), arming: this.c("theme.spot.holding"), done: this.c("theme.spot.done"), hint: this.c("theme.spot.hint") },
+        onFire: () => {
+          void send({ type: "engageHere", url: sp.url, meta });
+          if (this.spot === sp) sp.phase = "engaged";
+          // The tab's own overlay takes over; the confirmation lingers briefly, then goes.
+          setTimeout(() => this.spot === sp && this.setSpot(null), 4000);
+        },
+        onHoldStart: () => {
+          this.holding = true;
+        },
+        onHoldEnd: () => {
+          this.holding = false;
+          this.render();
+        },
+      });
+      const row = el("div", { className: "row" }, hold);
+      if (!known) {
+        row.append(
+          button(this.c("theme.spot.save"), () => {
+            void send({ type: "saveSpotted", url: sp.url, meta });
+            sp.phase = "saved";
+            this.render();
+            setTimeout(() => this.spot === sp && this.setSpot(null), 2500);
+          }, "link"),
+        );
+      }
+      card.append(row);
+    }
+    const panel = el("div", { className: "panel spot" }, head, card);
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-label", this.c("theme.spot.head"));
+    return panel;
   }
 
   /** Text for a copy key; falls back if the key is missing from the copy tables. */

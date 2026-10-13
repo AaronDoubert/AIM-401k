@@ -137,10 +137,15 @@ export class TrackView {
       );
     }
     // The checklist is detail: only for the locked or expanded unit. A one-line "now" for the rest.
+    // A unit waiting on you keeps its panel to the message and actions, but the locked
+    // unit still shows its live tab capture (Firefox) so you can see the form you're answering.
     const open = selected || this.expanded;
-    this.checklist.hidden = !open;
+    const waiting = m.needs.length > 0;
+    const showThumb = selected && !!m.thumb;
+    this.checklist.hidden = !open || waiting;
+    this.now.hidden = waiting;
     this.el.classList.toggle("expanded", open);
-    this.detail.hidden = finished || m.needs.length > 0 || (!this.now.textContent && !(open && m.fields.length) && !(selected && m.thumb));
+    this.detail.hidden = finished || (waiting ? !showThumb : !this.now.textContent && !(open && m.fields.length) && !showThumb);
 
     // A live capture of the tab (Firefox), only for the locked unit.
     if (selected && m.thumb) {

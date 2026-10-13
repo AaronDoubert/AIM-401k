@@ -76,6 +76,7 @@ A setup wizard opens as soon as the extension is installed. You can reopen it an
 
 ### Add jobs
 
+- **Just browse (Spotter):** with **Spotter** on (the switch at the top of the toolbar popup; on by default), open any job posting and a card appears in the bottom-right corner with the role, company and location. **Hold to start** (press and hold about a second) and it fills the application in that tab while you open the next posting. **Save for later** tracks it without applying, and **×** dismisses it. Spotter recognizes postings by the job data most boards publish for search engines, by known application sites (Greenhouse, Lever, Ashby, Workday, LinkedIn, Indeed…), or by a job-like link plus an Apply button. It reads the page in your browser and sends nothing anywhere.
 - **From the toolbar popup:** on a job page, click **Autofill this tab** to fill it right there, or **Queue this tab** to add it to the list. You can also paste a batch of links into the popup and click **Queue**.
 - **From the Tracker:** paste job posting or application links (any text containing links works) and click **Queue & start applying**. Use **Save for later** to track a job without applying yet.
 - **From a spreadsheet:** **Tracker → Import spreadsheet** reads CSV/TSV, Excel (.xlsx), cells pasted from Google Sheets or Excel, or a published Google Sheet link. See [Spreadsheets](#spreadsheets).

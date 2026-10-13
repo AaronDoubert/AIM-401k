@@ -1,7 +1,8 @@
 import { upsertAnswer } from "../core/answerBank";
 import { api } from "../shared/api";
-import type { ContentContext, JobPatch, ToBackground, ToContent } from "../shared/messages";
-import type { Need } from "../shared/types";
+import { urlKey } from "../core/sheet";
+import type { ContentContext, JobPatch, SpotReply, ToBackground, ToContent } from "../shared/messages";
+import type { Job, Need, PageMeta } from "../shared/types";
 import { frameMayFill } from "../shared/frames";
 import { uid } from "../shared/util";
 import { listModels, testConnection } from "./ai";
@@ -62,6 +63,37 @@ function patchJob(s: State, jobId: string, patch: JobPatch): number | null {
   }
   job.updatedAt = Date.now();
   return close;
+}
+
+/** Fill a job's blanks from what the page says about itself. */
+function withMeta(job: Job, meta?: PageMeta): void {
+  if (!meta) return;
+  if (meta.title && !job.title) job.title = meta.title;
+  if (meta.company && !job.company) job.company = meta.company;
+  if (meta.location && !job.location) job.location = meta.location;
+  if (meta.ats && meta.ats !== "generic") job.ats = meta.ats;
+}
+
+/** Start filling the application in this tab: a new job, or the one already tracked for this URL. */
+async function adopt(tabId: number, url: string, meta?: PageMeta): Promise<boolean> {
+  if (!url || !/^https?:/.test(url)) return false;
+  const key = urlKey(url);
+  await mutate((s) => {
+    let job = s.jobs.find((j) => j.tabId === tabId && ACTIVE.includes(j.status)) ?? s.jobs.find((j) => urlKey(j.url) === key);
+    if (!job) {
+      job = newJob(url, "running", false);
+      s.jobs.push(job);
+    }
+    withMeta(job, meta);
+    clearNeeds(s, job.id);
+    job.tabId = tabId;
+    job.status = "running";
+    job.lastProgressAt = Date.now();
+    log(job, "Started on this tab");
+  });
+  await toTab(tabId, { type: "run" });
+  broadcast();
+  return true;
 }
 
 async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
@@ -291,20 +323,36 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
 
     case "adoptTab": {
       const tab = await api.tabs.get(msg.tabId);
-      if (!tab.url || !/^https?:/.test(tab.url)) return false;
+      return adopt(msg.tabId, tab.url ?? "");
+    }
+
+    case "spot": {
+      const s = await getState();
+      const chud = s.settings.ui.chud;
+      if (!s.settings.spotter || tabId == null || !/^https?:/.test(msg.url)) return { show: false, chud } satisfies SpotReply;
+      // A tab we're already filling has its own overlay.
+      if (s.jobs.some((j) => j.tabId === tabId && ACTIVE.includes(j.status))) return { show: false, chud } satisfies SpotReply;
+      const key = urlKey(msg.url);
+      const job = s.jobs.find((j) => urlKey(j.url) === key);
+      const reply: SpotReply = { show: true, chud };
+      if (job) reply.known = { status: job.status, appliedAt: job.appliedAt, elsewhere: job.tabId != null && job.tabId !== tabId && ACTIVE.includes(job.status) };
+      return reply;
+    }
+
+    case "engageHere":
+      if (tabId == null) return false;
+      return adopt(tabId, msg.url, msg.meta);
+
+    case "saveSpotted": {
+      const key = urlKey(msg.url);
+      if (!/^https?:/.test(msg.url)) return false;
       await mutate((s) => {
-        let job = s.jobs.find((j) => j.tabId === msg.tabId && ACTIVE.includes(j.status)) ?? s.jobs.find((j) => j.url === tab.url);
-        if (!job) {
-          job = newJob(tab.url!, "running", false);
-          s.jobs.push(job);
-        }
-        clearNeeds(s, job.id);
-        job.tabId = msg.tabId;
-        job.status = "running";
-        job.lastProgressAt = Date.now();
-        log(job, "Started on this tab");
+        if (s.jobs.some((j) => urlKey(j.url) === key)) return;
+        const job = newJob(msg.url, "saved", true);
+        withMeta(job, msg.meta);
+        log(job, "Saved from the page");
+        s.jobs.push(job);
       });
-      await toTab(msg.tabId, { type: "run" });
       broadcast();
       return true;
     }
@@ -419,6 +467,9 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
 // tests, Gmail, imports…) is accepted only from the extension's own pages.
 const FROM_CONTENT = new Set<ToBackground["type"]>([
   "hello",
+  "spot",
+  "engageHere",
+  "saveSpotted",
   "report",
   "progress",
   "draft",

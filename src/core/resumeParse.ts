@@ -1,6 +1,7 @@
 import { EMPTY_EDU, EMPTY_WORK } from "../shared/defaults";
 import type { EducationEntry, Profile, WorkEntry } from "../shared/types";
 import { isPresent, parseDate, toIso } from "./dates";
+import { isKnownCity } from "./geo";
 
 // Turns resume text into profile fields without any AI. It is deliberately
 // conservative: anything it isn't fairly sure about is left empty for the
@@ -23,17 +24,31 @@ const SECTION_NAMES: Record<string, RegExp> = {
 };
 
 const MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
-const DATE = `(?:${MONTH}\\s+\\d{4}|\\d{1,2}/\\d{4}|\\d{4}-\\d{2}|\\d{4})`;
-const END = `(?:${DATE}|present|current|now|today)`;
-const RANGE_RE = new RegExp(`(${DATE})\\s*(?:-|–|—|to|until)\\s*(${END})`, "i");
+const SEASON = "(?:spring|summer|fall|autumn|winter)";
+const DATE = `(?:${MONTH}\\s*\\d{4}|${SEASON}\\s+\\d{4}|\\d{1,2}/\\d{4}|\\d{4}-\\d{2}|\\d{4})`;
+const END = `(?:${DATE}|present|current|now|today|ongoing)`;
+// PDFs spell the range dash many ways: hyphen, en/em dash, minus, figure dash, "--", "to".
+const DASH = "(?:--|[-‐‑‒–—―−~]|to|until|through)";
+const RANGE_RE = new RegExp(`(${DATE})\\s*${DASH}\\s*(${END})`, "i");
 const SINGLE_DATE_RE = new RegExp(`\\b(${DATE})\\b`, "i");
 
-const BULLET_RE = /^\s*[•▪◦●\-*–·]\s*/;
-const COMPANY_HINT = /\b(inc|llc|ltd|corp|corporation|co|company|gmbh|plc|group|labs?|technologies|systems|solutions|university|agency|bank)\b\.?/i;
+const BULLET_RE = /^\s*[•▪◦●○■□➢►▸‣⁃\-*–·]\s*/;
+const COMPANY_HINT = /\b(inc|llc|ltd|corp|corporation|co|company|gmbh|plc|group|labs?|technologies|systems|solutions|university|agency|bank|associates|partners|motors|consulting|studios?|creatives?|industries|enterprises|holdings|ventures|services|foundation|hospital|institute|lab|laborator(y|ies))\b\.?/i;
+const TITLE_HINT =
+  /\b(intern(ship)?|engineer(ing)?|developer|manager|analyst|assistant|designer|lead|director|specialist|consultant|coordinator|associate|technician|researcher|scientist|officer|representative|president|founder|co-?founder|fellow|tutor|teacher|instructor|volunteer|administrator|architect|programmer|accountant|advisor|editor|writer|operator|supervisor|head|vp|cto|ceo|clerk|cashier|mentor|captain|member|student)\b/i;
 const SCHOOL_HINT = /\b(university|college|institute|school|academy|polytechnic)\b/i;
 const DEGREE_HINT =
   /\b(bachelor|master|associate|doctor|ph\.?\s?d|mba|b\.?\s?s\.?c?|m\.?\s?s\.?c?|b\.?\s?a|m\.?\s?a|b\.?\s?eng|m\.?\s?eng|bfa|mfa|jd|md|diploma|certificate|ged|high school)\b/i;
 const CITY_STATE = /\b([A-Z][a-zA-Z.'\- ]{1,30}),\s*([A-Z]{2}|[A-Z][a-z]+(?: [A-Z][a-z]+)?)\b(?:\s+(\d{5}))?/;
+/** Words that start a two-word city ("Port Washington", "San Jose", "Fort Worth"). */
+const CITY_PREFIX = new Set(
+  "port new san santa los las fort ft st st. saint east west north south lake mount mt mt. el palo grand long ann baton cedar coral corpus des del glen great green little oak rock round sioux silver white winston bowling college jersey kansas oklahoma daly elk iowa boca cape chapel menlo mountain redwood royal sugar thousand upper beverly culver huntington newport overland palm pompano red cherry falls king queens staten bay".split(" "),
+);
+/** Words that end a two-word city ("Kansas City", "Palm Beach", "Overland Park"). */
+const CITY_SUFFIX = /^(city|beach|park|springs|falls|heights|hills|valley|village|island|harbor|point|rapids|creek|grove|station|lake|junction|gardens|bluffs|plains|county|township)$/i;
+const US_STATE_ABBR = new Set(
+  "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR".split(" "),
+);
 
 function headingOf(line: string): string | null {
   const t = line.trim().replace(/[:\s]+$/, "");
@@ -62,7 +77,9 @@ function splitSections(lines: string[]): { header: string[]; sections: Record<st
 
 function ym(s: string): string {
   if (isPresent(s)) return "";
-  const d = parseDate(s.replace(/\.$/, ""));
+  const season = s.match(/^(spring|summer|fall|autumn|winter)\s+(\d{4})$/i);
+  if (season) return `${season[2]}-${{ spring: "03", summer: "06", fall: "09", autumn: "09", winter: "01" }[season[1]!.toLowerCase()]}`;
+  const d = parseDate(s.replace(/\.$/, "").replace(/^([a-z]+)\.?\s*(\d{4})$/i, "$1 $2"));
   return d ? toIso({ y: d.y, ...(d.m ? { m: d.m } : {}) }) : "";
 }
 
@@ -74,31 +91,127 @@ function pieces(s: string): string[] {
     .filter(Boolean);
 }
 
+/** Only the strong column separators: keeps "Mechanical Engineering Intern – Controls" whole. */
+function columns(s: string): string[] {
+  return s
+    .split(/\s*(?:\||·|•|\t| {3,}| at )\s*/)
+    .map((p) => p.replace(/^[,;\s]+|[,;\s]+$/g, "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * Pull a trailing "City, ST" (or "Remote") off a header line. PDF text often loses the
+ * gap between a left-aligned company and a right-aligned location ("Highland Associates
+ * Manhattan, NY"), so the city is read back from the end: a known city, a two-word
+ * city ("Port Washington", "Kansas City"), else the last word.
+ */
+export function splitPlace(line: string): { rest: string; place: string } {
+  const t = line.trim().replace(/[,;\s]+$/, "");
+  const remote = t.match(/^(.*?)[\s,|·•–—-]*\(?\b(remote|hybrid|remote, us|remote \(us\))\)?$/i);
+  if (remote) return { rest: remote[1]!.trim(), place: remote[2]![0]!.toUpperCase() + remote[2]!.slice(1).toLowerCase() };
+  const m = t.match(/^(.*?)[\s,]*\b((?:[A-Z][\w.'’-]*\s+){0,3}[A-Z][\w.'’-]*),\s*([A-Z]{2}|[A-Z][a-z]+(?: [A-Z][a-z]+)?)(?:\s+\d{5})?$/);
+  if (!m) return { rest: t, place: "" };
+  const state = m[3]!;
+  if (/^[A-Z]{2}$/.test(state) ? !US_STATE_ABBR.has(state) : false) return { rest: t, place: "" };
+  const before = m[1]!.trim();
+  const words = m[2]!.split(/\s+/);
+  // A gap the PDF kept (3+ spaces) already marks where the location column starts.
+  const gap = t.match(/^(.*\S) {3,}(\S.*)$/);
+  let k = 1;
+  if (gap && gap[2]!.endsWith(`${state}`) && gap[2]!.split(",")[0]!.split(/\s+/).length <= 4) {
+    k = Math.min(words.length, gap[2]!.split(",")[0]!.trim().split(/\s+/).length);
+  } else {
+    for (let n = Math.min(3, words.length); n >= 1; n--) {
+      if (isKnownCity(words.slice(-n).join(" "), state)) {
+        k = n;
+        break;
+      }
+    }
+    if (k === 1 && words.length >= 2) {
+      const prev = words[words.length - 2]!.toLowerCase();
+      if (CITY_PREFIX.has(prev) || CITY_SUFFIX.test(words[words.length - 1]!)) k = 2;
+      if (k === 2 && words.length >= 3 && CITY_SUFFIX.test(words[words.length - 2]!)) k = 3; // Salt Lake City
+    }
+    // Nothing before the city? Then the whole thing is the place ("New York, NY").
+    if (!before && words.length <= 3 && !COMPANY_HINT.test(m[2]!)) k = words.length;
+  }
+  const city = words.slice(-k).join(" ");
+  const rest = [before, ...words.slice(0, words.length - k)].join(" ").replace(/[\s,|·•–—-]+$/, "").trim();
+  return { rest, place: `${city}, ${state}` };
+}
+
+/** Wrapped text from the line above, not a new header: "standardizing control narrative…". */
+const isContinuation = (line: string) => /^[a-z(&+]/.test(line) || /^(and|or|of|to|for|with|in)\b/.test(line);
+
 function parseWork(lines: string[]): WorkEntry[] {
   const clean = lines.map((l) => l.trim()).filter(Boolean);
-  const anchors = clean.map((l, i) => (RANGE_RE.test(l) && !BULLET_RE.test(l) ? i : -1)).filter((i) => i >= 0);
-  // Each entry's header = up to 2 short non-bullet lines right above its date line.
-  const headStart = anchors.map((ai, k) => {
+  const isBullet = (i: number) => BULLET_RE.test(clean[i] ?? "");
+  const anchors = clean.map((l, i) => (RANGE_RE.test(l) && !isBullet(i) && l.length < 140 ? i : -1)).filter((i) => i >= 0);
+  const headerish = (i: number) => {
+    const l = clean[i];
+    return !!l && !isBullet(i) && !isContinuation(l) && l.length < 90 && !(l.length > 40 && /[.!?]$/.test(l)) && !RANGE_RE.test(l);
+  };
+  // Each entry's header = up to 2 short lines above its date line, plus (for templates
+  // that put "Company   City, ST" under "Title   Dates") one such line just below it.
+  const above = anchors.map((ai, k) => {
     const floor = k > 0 ? anchors[k - 1]! + 1 : 0;
     let h = ai;
-    while (h > floor && ai - h < 2 && !BULLET_RE.test(clean[h - 1]!) && clean[h - 1]!.length < 90) h--;
+    while (h > floor && ai - h < 2 && headerish(h - 1)) h--;
     // The previous entry needs at least its own body; never steal its first line when it has no bullets.
     return k > 0 && h === floor && ai - floor > 1 ? h + 1 : h;
   });
+  const below = anchors.map((ai, k) => {
+    const next = k + 1 < anchors.length ? above[k + 1]! : clean.length;
+    const i = ai + 1;
+    if (i >= next || !headerish(i) || above[k]! < ai) return ai;
+    // Only when the body (bullets or prose) follows it.
+    return i + 1 >= next || isBullet(i + 1) || !headerish(i + 1) ? i : ai;
+  });
+
   return anchors.map((ai, k) => {
     const line = clean[ai]!;
     const m = line.match(RANGE_RE)!;
-    const rest = line.replace(m[0], " ").replace(/[()]/g, " ");
-    const parts = [...clean.slice(headStart[k], ai).flatMap(pieces), ...pieces(rest)];
-    const location = parts.find((p) => CITY_STATE.test(p) || /^remote$/i.test(p)) ?? "";
-    const names = parts.filter((p) => p !== location);
-    let [title = "", company = ""] = names;
-    if (COMPANY_HINT.test(title) && !COMPANY_HINT.test(company)) [title, company] = [company, title];
-    const bodyEnd = k + 1 < anchors.length ? headStart[k + 1]! : clean.length;
-    const description = clean
-      .slice(ai + 1, bodyEnd)
-      .map((l) => l.replace(BULLET_RE, "").trim())
-      .join("\n");
+    const dateRest = line.replace(m[0], "   ").replace(/[()]/g, " ").replace(/\s*[,|·•–—-]\s*$/, "").trim();
+    const headLines = [...clean.slice(above[k], ai), ...(dateRest ? [dateRest] : []), ...clean.slice(ai + 1, below[k]! + 1)];
+
+    let location = "";
+    const names: string[] = [];
+    for (const hl of headLines) {
+      const { rest, place } = location ? { rest: hl, place: "" } : splitPlace(hl);
+      if (place) location = place;
+      names.push(...columns(rest));
+    }
+    // One line only ("Engineer – Initech – Austin, TX"): fall back to every separator.
+    const parts = names.length === 1 && headLines.length === 1 ? pieces(names[0]!) : names;
+    const placeIdx = location ? -1 : parts.findIndex((p) => CITY_STATE.test(p) || /^remote$/i.test(p));
+    if (placeIdx >= 0) location = parts.splice(placeIdx, 1)[0]!;
+
+    let title = "";
+    let company = "";
+    const titled = parts.filter((p) => TITLE_HINT.test(p) && !COMPANY_HINT.test(p));
+    const companied = parts.filter((p) => COMPANY_HINT.test(p) && !TITLE_HINT.test(p));
+    if (titled.length === 1) title = titled[0]!;
+    if (companied.length === 1 && companied[0] !== title) company = companied[0]!;
+    const left = parts.filter((p) => p !== title && p !== company);
+    if (!title && !company) {
+      // Unhinted: the text on the date line is the title (most templates); else first = title.
+      const onDate = dateRest ? columns(dateRest)[0] : undefined;
+      title = onDate && left.includes(onDate) && headLines.length > 1 ? onDate : (left[0] ?? "");
+      company = left.find((p) => p !== title) ?? "";
+    } else if (!title) title = left[0] ?? "";
+    else if (!company) company = left[0] ?? "";
+
+    const bodyEnd = k + 1 < anchors.length ? above[k + 1]! : clean.length;
+    const body = clean.slice(below[k]! + 1, bodyEnd);
+    const hasBullets = body.some((l) => BULLET_RE.test(l));
+    const items: string[] = [];
+    for (const l of body) {
+      const text = l.replace(BULLET_RE, "").trim();
+      const prev = items[items.length - 1];
+      const joins = prev != null && !BULLET_RE.test(l) && (hasBullets || isContinuation(text) || /[,;:&/-]$/.test(prev));
+      if (joins) items[items.length - 1] = prev.endsWith("-") && !prev.endsWith(" -") ? prev + text : `${prev} ${text}`;
+      else items.push(text);
+    }
     return {
       ...EMPTY_WORK,
       title,
@@ -107,7 +220,7 @@ function parseWork(lines: string[]): WorkEntry[] {
       startDate: ym(m[1]!),
       endDate: ym(m[2]!),
       current: isPresent(m[2]!),
-      description,
+      description: items.join("\n"),
     };
   });
 }

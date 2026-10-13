@@ -183,3 +183,90 @@ export function pageErrors(): string[] {
     .filter((t) => t && t.length < 300)
     .slice(0, 5);
 }
+
+// ---------------------------------------------------------------------------
+// Spotter: is this page a job posting (or its application form)?
+
+interface LdJob {
+  title?: string;
+  hiringOrganization?: { name?: string } | string;
+  jobLocation?: { address?: { addressLocality?: string; addressRegion?: string } } | { address?: { addressLocality?: string; addressRegion?: string } }[];
+  jobLocationType?: string;
+}
+
+/** schema.org JobPosting from the page's JSON-LD, which most job boards publish for search engines. */
+function ldJobPosting(): LdJob | null {
+  for (const s of queryAll<HTMLScriptElement>('script[type="application/ld+json"]')) {
+    let data: unknown;
+    try {
+      data = JSON.parse(s.textContent ?? "");
+    } catch {
+      continue;
+    }
+    const stack: unknown[] = [data];
+    while (stack.length) {
+      const v = stack.pop();
+      if (Array.isArray(v)) stack.push(...v);
+      else if (v && typeof v === "object") {
+        const o = v as Record<string, unknown>;
+        const t = o["@type"];
+        if (t === "JobPosting" || (Array.isArray(t) && t.includes("JobPosting"))) return o as LdJob;
+        if (o["@graph"]) stack.push(o["@graph"]);
+      }
+    }
+  }
+  return null;
+}
+
+const JOBISH_PATH = /\/(jobs?|careers?|positions?|openings?|vacanc(y|ies)|requisitions?|apply|postings?|opportunit(y|ies))\b|[?&](gh_jid|jobid|job_id|jk|vjk|currentjobid|reqid)=/i;
+
+/** Board-specific posting URLs; their search and listing pages are not a single job. */
+function boardPosting(ats: string): boolean | null {
+  const p = location.pathname;
+  const q = location.search;
+  switch (ats) {
+    case "linkedin":
+      return /^\/jobs\/view\//.test(p) || /[?&]currentJobId=/.test(q);
+    case "indeed":
+      return /^\/(viewjob|rc\/clk|m\/viewjob)/.test(p) || /[?&]vjk=/.test(q);
+    case "greenhouse":
+      return /\/jobs\/\d+/.test(p) || /[?&]gh_jid=/.test(q);
+    case "lever":
+    case "ashby":
+      return p.split("/").filter(Boolean).length >= 2;
+    case "workday":
+      return /\/job\//.test(p);
+    default:
+      return null;
+  }
+}
+
+/**
+ * The posting this page shows, or null. Strong signals: JSON-LD JobPosting, or a known
+ * ATS posting URL. Otherwise a job-like URL plus an Apply button or a resume upload.
+ */
+export function spotJob(): PageMeta | null {
+  if (window !== window.top) return null;
+  const ld = ldJobPosting();
+  const ats = detectAts();
+  const board = boardPosting(ats);
+  const applyish = () => !!findApplyButton() || queryAll<HTMLInputElement>("input[type=file]").some((f) => /resume|cv/i.test(`${f.name} ${f.id} ${f.accept} ${f.getAttribute("aria-label") ?? ""}`) || isVisible(f));
+  const isJob = !!ld || board === true || (board === null && JOBISH_PATH.test(location.pathname + location.search) && applyish());
+  if (!isJob) return null;
+  const meta = extractMeta();
+  if (ld) {
+    const org = typeof ld.hiringOrganization === "string" ? ld.hiringOrganization : ld.hiringOrganization?.name;
+    const locs = Array.isArray(ld.jobLocation) ? ld.jobLocation : ld.jobLocation ? [ld.jobLocation] : [];
+    const place = locs
+      .map((l) => [l.address?.addressLocality, l.address?.addressRegion].filter(Boolean).join(", "))
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(" / ");
+    if (ld.title) meta.title = truncate(ld.title.trim(), 140);
+    if (org) meta.company = truncate(org.trim(), 80);
+    if (place) meta.location = truncate(place, 80);
+    else if (/telecommute/i.test(ld.jobLocationType ?? "")) meta.location = "Remote";
+  }
+  meta.description = ""; // the card needs names, not the whole posting
+  return meta;
+}

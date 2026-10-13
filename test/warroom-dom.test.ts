@@ -133,3 +133,24 @@ describe("War Room track row", () => {
     expect(view.el.querySelector(".c-co")!.textContent).toBe("Localhost");
   });
 });
+
+describe("War Room track row: live tab capture", () => {
+  const thumb = "data:image/jpeg;base64,AAAA";
+
+  it("shows the capture on the locked unit even while it waits on you", () => {
+    view.update(model([need({ inputType: "textarea" })], { thumb }), 1, "TGT-0042", Date.now(), true, true);
+    const detail = view.el.querySelector<HTMLElement>(".track-detail")!;
+    expect(detail.hidden).toBe(false);
+    expect(detail.querySelector("img.thumb")?.getAttribute("src")).toBe(thumb);
+    // The waiting panel stays lean: no checklist or "now" line next to the capture.
+    expect(view.el.querySelector<HTMLElement>(".checklist")!.hidden).toBe(true);
+    expect(view.el.querySelector<HTMLElement>(".c-now")!.hidden).toBe(true);
+  });
+
+  it("drops the capture when the unit is no longer locked", () => {
+    view.update(model([need({ inputType: "textarea" })], { thumb }), 1, "TGT-0042", Date.now(), true, true);
+    view.update(model([need({ inputType: "textarea" })], { thumb }), 1, "TGT-0042", Date.now(), true, false);
+    expect(view.el.querySelector("img.thumb")).toBeNull();
+    expect(view.el.querySelector<HTMLElement>(".track-detail")!.hidden).toBe(true);
+  });
+});

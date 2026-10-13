@@ -211,3 +211,9 @@ export function parseLocation(text: string): Place {
   if (foreign) return FOREIGN;
   return UNKNOWN;
 }
+
+/** True when `name` is a city the offline table (or an alias) knows in `state` ("Manhattan", "NY"). */
+export function isKnownCity(name: string, state: string): boolean {
+  const code = stateCode(norm(state), true);
+  return !!code && !!lookupCity(norm(name), code);
+}

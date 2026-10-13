@@ -27,6 +27,9 @@ async function pdfText(buf: ArrayBuffer): Promise<string> {
     for (const raw of content.items) {
       const item = raw as PdfTextItem;
       if (!("str" in item)) continue;
+      // Whitespace-only items span the gap between columns; skipping them keeps the gap
+      // measurable, so "Company      City, ST" doesn't collapse into one run of words.
+      if (!item.str.trim() && !item.hasEOL) continue;
       const x = item.transform[4] ?? 0;
       const y = item.transform[5] ?? 0;
       if (lastY != null && Math.abs(y - lastY) > 2) out += "\n";
