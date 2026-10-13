@@ -3,6 +3,7 @@ import { MARK_OFFWHITE_SVG } from "../shared/brand";
 import { copy, type CopyKey } from "../shared/copy";
 import type { OverlayState, ToBackground } from "../shared/messages";
 import type { Need } from "../shared/types";
+import { guardedRelease, HOLD_MS } from "../ui/guarded";
 
 // The floating "AIM-401k needs you" box shown on every tab. Lives in a closed
 // shadow root so page CSS can't break it and page scripts can't read it.
@@ -13,114 +14,114 @@ import type { Need } from "../shared/types";
 const send = (msg: ToBackground): Promise<unknown> => api.runtime.sendMessage(msg);
 
 /** Press-and-hold time for "submit for me". */
-export const HOLD_MS = 1200;
+export { HOLD_MS };
 
 const CSS = `
 :host { all: initial; }
 * { box-sizing: border-box; }
 .wrap {
-  --bg: #0c0c0b; --panel: #131311; --well: #090908; --line: #262522; --line-2: #353330; --bracket: #5c5953;
-  --fg: #f1ede4; --fg-2: #cdc9c0; --muted: #a19d94; --accent: #f1ede4; --accent-hi: #ffffff; --ok: #86c095; --warn: #dcae5e; --danger: #ec5f48;
+  --bg: #0c0c0b; --panel: #131311; --well: #090908; --line: #262522; --line-2: #353330;
+  --fg: #f1ede4; --fg-2: #cdc9c0; --muted: #a19d94;
+  --ok: #86c095; --warn: #dcae5e; --danger: #ec5f48; --info: #6fb3c4;
   --sans: "Geist", "Geist Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: "Geist Mono", "Geist Mono Variable", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --cond: "Barlow Condensed", "DIN Condensed", "DIN Alternate", Bahnschrift, "Arial Narrow", sans-serif-condensed, sans-serif;
   position: fixed; right: 16px; bottom: 16px; z-index: 2147483647;
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
-  font: 13px/1.4 var(--sans); color: var(--fg); text-align: left;
+  font: 13px/1.4 var(--sans); color: var(--fg); text-align: left; font-variant-numeric: tabular-nums;
 }
 .wrap * { font-family: inherit; }
-.mono, .pill, .head, .job, .kind, .detail, button.b, label.rem, .empty { font-family: var(--mono); }
-
-/* corner brackets */
-.brk::before { content: ""; position: absolute; inset: -1px; pointer-events: none;
-  background:
-    linear-gradient(var(--bc), var(--bc)) left top / 10px 2px, linear-gradient(var(--bc), var(--bc)) left top / 2px 10px,
-    linear-gradient(var(--bc), var(--bc)) right top / 10px 2px, linear-gradient(var(--bc), var(--bc)) right top / 2px 10px,
-    linear-gradient(var(--bc), var(--bc)) left bottom / 10px 2px, linear-gradient(var(--bc), var(--bc)) left bottom / 2px 10px,
-    linear-gradient(var(--bc), var(--bc)) right bottom / 10px 2px, linear-gradient(var(--bc), var(--bc)) right bottom / 2px 10px;
-  background-repeat: no-repeat; }
+/* Three voices: mono = machine data only; condensed = headers and buttons; sans = human content. */
+.kind, .count { font-family: var(--mono); text-transform: uppercase; }
+.pill, .head b, .head small, button.b, label.rem, .guard-cover, .guard-label { font-family: var(--cond); }
+.chud .pill, .chud .head b, .chud .head small, .chud button.b, .chud label.rem, .chud .guard-cover, .chud .guard-label { text-transform: uppercase; }
 
 .mark { width: 18px; height: 18px; flex: none; display: block; }
 .head .mark { width: 16px; height: 16px; }
-.pip { width: 6px; height: 6px; flex: none; background: var(--accent); display: inline-block; }
-.pip.blink { animation: blink 1s steps(2, jump-none) infinite; }
-@keyframes blink { 50% { opacity: .2; } }
+/* status lamp: steady, round */
+.lamp { width: 8px; height: 8px; flex: none; display: inline-block; border-radius: 50%; background: var(--ok); }
+.lamp.waiting { background: var(--warn); }
+.lamp.paused { background: var(--muted); }
 
-.pill { --bc: var(--bracket); position: relative; display: flex; align-items: center; gap: 9px; padding: 9px 13px; border: 1px solid var(--line-2); border-radius: 0;
-  cursor: pointer; background: var(--bg); color: var(--fg); font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
-  box-shadow: 0 10px 30px rgba(0,0,0,.45); }
-.pill:hover { border-color: var(--bracket); }
-.pill.alert { --bc: var(--danger); border-color: rgba(236,95,72,.6); color: var(--fg); background: #170e0c; }
-.pill.alert .pip { background: var(--danger); }
-.pill.paused .pip { background: var(--muted); }
+.pill { display: flex; align-items: center; gap: 9px; padding: 8px 13px; border: 1px solid var(--line-2); border-radius: 0;
+  cursor: pointer; background: var(--bg); color: var(--fg); font-size: 14px; font-weight: 500; letter-spacing: .06em; line-height: 1.2;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.pill:hover { border-color: #55524c; }
+.pill.alert { border-color: var(--warn); background: #181408; }
 .pill.arrive { animation: arrive .5s ease-out 2; }
-@keyframes arrive { 50% { box-shadow: 0 0 0 4px rgba(236,95,72,.35), 0 10px 30px rgba(0,0,0,.45); } }
+@keyframes arrive { 50% { box-shadow: 0 0 0 4px rgba(220,174,94,.35), 0 8px 24px rgba(0,0,0,.45); } }
 
-.panel { --bc: var(--bracket); position: relative; width: 384px; max-width: calc(100vw - 32px); max-height: min(72vh, 580px); display: flex; flex-direction: column;
-  background: var(--bg); border: 1px solid var(--line-2); box-shadow: 0 18px 50px rgba(0,0,0,.55); animation: open .16s ease-out; }
-.panel.hot { --bc: var(--accent); }
+.panel { width: 384px; max-width: calc(100vw - 32px); max-height: min(72vh, 580px); display: flex; flex-direction: column;
+  background: var(--bg); border: 1px solid var(--line-2); box-shadow: 0 16px 44px rgba(0,0,0,.55); animation: open .16s ease-out; }
 @keyframes open { from { opacity: 0; transform: translateY(6px); } }
 .head { display: flex; flex-direction: column; gap: 6px; padding: 9px 10px 9px 12px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
 .head > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
-.head b { display: flex; align-items: center; gap: 9px; font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.head .pip { background: var(--danger); }
-.panel:not(.hot) .head .pip { background: var(--accent); }
-.head small { display: block; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head b { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; letter-spacing: .06em; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head small { display: block; color: var(--muted); font-size: 13px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .head button.b { flex: none; }
-.chud .job { text-transform: uppercase; }
 .list { overflow: auto; overscroll-behavior: contain; }
-.empty { padding: 18px 14px; color: var(--muted); font-size: 11.5px; letter-spacing: .04em; }
+.empty { padding: 16px 14px; color: var(--muted); font-size: 13px; }
 
 .card { position: relative; padding: 11px 14px 12px 16px; border-bottom: 1px solid var(--line); }
 .card:last-child { border-bottom: 0; }
-.card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--k, var(--danger)); }
-.job { font-size: 10px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kind { display: inline-block; font-size: 9.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; padding: 1px 5px; margin-right: 8px;
-  border: 1px solid currentColor; color: var(--k, var(--danger)); vertical-align: 1px; }
-.k-question { --k: var(--warn); }
-.k-consent, .k-signature { --k: var(--accent); }
-.k-review_submit { --k: var(--ok); }
-.k-captcha, .k-login, .k-stalled, .k-error { --k: var(--danger); }
-.prompt { font-size: 13.5px; line-height: 1.4; margin: 2px 0 9px; white-space: pre-wrap; word-break: break-word; color: var(--fg); }
-.detail { font-size: 11px; color: var(--warn); margin: -4px 0 9px; }
+.card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--k, var(--warn)); }
+.job { font-size: 12px; color: var(--muted); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kind { display: inline-block; font-size: 10px; font-weight: 500; letter-spacing: .1em; padding: 1px 5px; margin-right: 8px;
+  border: 1px solid currentColor; color: var(--k, var(--warn)); vertical-align: 1px; }
+/* red = true failures only; amber = an operator is needed */
+.k-question, .k-consent, .k-signature, .k-login, .k-captcha, .k-review_submit { --k: var(--warn); }
+.k-stalled, .k-error { --k: var(--danger); }
+.prompt { font-size: 14px; line-height: 1.4; margin: 2px 0 9px; white-space: pre-wrap; word-break: break-word; color: var(--fg); }
+.detail { font-size: 12px; color: var(--warn); margin: -4px 0 9px; }
 input[type=text], input[type=date], textarea, select { display: block; width: 100%; margin: 0; font: 13px/1.4 var(--sans); padding: 7px 9px; border: 1px solid var(--line-2); border-radius: 0;
   color: var(--fg); background: var(--well); color-scheme: dark; }
 input::placeholder, textarea::placeholder { color: #79766f; opacity: 1; }
-input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
 textarea { min-height: 72px; resize: vertical; }
-input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; margin: 0; border: 1px solid var(--bracket); background: var(--well) no-repeat center / 9px 7px; cursor: pointer; flex: none; }
-input[type=checkbox]:checked { background-color: var(--accent); border-color: var(--accent);
+input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; margin: 0; border: 1px solid #55524c; background: var(--well) no-repeat center / 9px 7px; cursor: pointer; flex: none; }
+input[type=checkbox]:checked { background-color: var(--fg); border-color: var(--fg);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l3 3 5-6' fill='none' stroke='%230c0c0b' stroke-width='2'/%3E%3C/svg%3E"); }
 .opts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
-button.b { position: relative; display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; line-height: 1.2;
-  padding: 7px 10px; min-height: 30px; border-radius: 0; border: 1px solid var(--line-2); background: var(--panel); color: var(--fg); cursor: pointer; overflow: hidden; }
-button.b:hover { border-color: var(--bracket); background: #1b1a18; }
-button.b.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
-button.b.primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
-button.b.link { border-color: transparent; background: none; color: var(--muted); padding: 7px 5px; }
+button.b { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; letter-spacing: .05em; line-height: 1.2;
+  padding: 6px 11px; min-height: 30px; border-radius: 0; border: 1px solid var(--line-2); background: var(--panel); color: var(--fg); cursor: pointer; }
+button.b:hover { border-color: #55524c; background: #1b1a18; }
+button.b.primary { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+button.b.primary:hover { background: #fff; border-color: #fff; }
+button.b.link { border-color: transparent; background: none; color: var(--muted); padding: 6px 5px; font-weight: 500; }
 button.b.link:hover { color: var(--fg); background: none; border-color: transparent; text-decoration: underline; text-underline-offset: 3px; }
-button.b.icon { padding: 5px 8px; min-height: 26px; font-size: 12px; }
-button.b:focus-visible, .pill:focus-visible, input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-label.rem { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+button.b.icon { padding: 4px 9px; min-height: 26px; font-size: 15px; }
+button.b:focus-visible, .pill:focus-visible, input[type=checkbox]:focus-visible, .guard-cover:focus-visible, .guard-switch:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+label.rem { font-size: 13px; letter-spacing: .03em; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
 .opts label.rem { font: 13px/1.35 var(--sans); text-transform: none; letter-spacing: 0; color: var(--fg); gap: 8px; }
 
-/* hold-to-release */
-button.b.hold { justify-content: center; border-color: rgba(241,237,228,.45); color: var(--accent); user-select: none; -webkit-user-select: none; touch-action: none; }
-button.b.hold:hover { border-color: var(--accent); background: rgba(241,237,228,.07); }
-.hold svg { width: 15px; height: 15px; flex: none; transform: rotate(-90deg); }
-.hold circle { fill: none; stroke-width: 2.5; }
-.hold .track { stroke: rgba(241,237,228,.22); }
-.hold .prog { stroke: var(--accent); stroke-dasharray: 50.27; stroke-dashoffset: 50.27; }
-.hold .bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); }
-.hold.arming { background: rgba(241,237,228,.1); border-color: var(--accent); }
-.hold.arming .prog { stroke-dashoffset: 0; transition: stroke-dashoffset var(--hold) linear; }
-.hold.arming .bar { width: 100%; transition: width var(--hold) linear; }
-.hold.fired { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-.hold.fired .track { stroke: rgba(12,12,11,.3); }
-.hold.fired .prog { stroke: var(--bg); stroke-dashoffset: 0; }
+/* Guarded release: a cover that flips up over a hold switch. The one animated element. */
+.guarded { position: relative; display: inline-block; perspective: 360px; vertical-align: middle; }
+.guard-switch { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 30px; padding: 6px 12px;
+  border: 1px solid var(--line-2); border-radius: 0; background: var(--panel); color: var(--muted); cursor: default;
+  font-size: 14px; font-weight: 600; letter-spacing: .05em; line-height: 1.2; user-select: none; -webkit-user-select: none; touch-action: none; }
+.guard-ring { width: 15px; height: 15px; flex: none; transform: rotate(-90deg); }
+.guard-ring circle { fill: none; stroke-width: 2.5; }
+.guard-ring .track { stroke: rgba(241,237,228,.22); }
+.guard-ring .prog { stroke: var(--fg); }
+.guarded[data-state="open"] .guard-switch { border-color: var(--fg); color: var(--fg); cursor: pointer; }
+.guarded[data-state="open"] .guard-switch:hover { background: rgba(241,237,228,.07); }
+.guarded[data-state="arming"] .guard-switch { border-color: var(--fg); color: var(--fg); background: rgba(241,237,228,.1); cursor: pointer;
+  background-image: linear-gradient(var(--fg), var(--fg)); background-repeat: no-repeat; background-size: calc(var(--p, 0) * 100%) 2px; background-position: left bottom; }
+.guarded[data-state="fired"] .guard-switch { background: var(--ok); border-color: var(--ok); color: var(--bg); animation: fired .35s ease-out; }
+.guarded[data-state="fired"] .guard-ring .track { stroke: rgba(12,12,11,.3); }
+.guarded[data-state="fired"] .guard-ring .prog { stroke: var(--bg); }
+@keyframes fired { from { box-shadow: 0 0 0 5px rgba(134,192,149,.45); } }
+.guard-cover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0 12px;
+  border: 1px solid #000; border-radius: 0; cursor: pointer; font-size: 14px; font-weight: 700; letter-spacing: .08em; color: var(--warn);
+  background: linear-gradient(#14120d, #14120d) center / calc(100% - 20px) calc(100% - 8px) no-repeat, repeating-linear-gradient(-45deg, var(--warn) 0 7px, #14120d 7px 14px);
+  z-index: 1; transform-origin: 50% 0; transform: rotateX(0deg); transition: transform 180ms ease-out, opacity 180ms ease-out; }
+.guard-cover:hover { filter: brightness(1.1); }
+.guarded:not([data-state="closed"]) .guard-cover { transform: rotateX(-180deg); opacity: 0; pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pip.blink, .pill.arrive, .panel { animation: none; }
+  .pill.arrive, .panel, .guarded[data-state="fired"] .guard-switch { animation: none; }
+  .guard-cover { transition: none; }
 }
 `;
 
@@ -128,12 +129,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
   const e = document.createElement(tag);
   Object.assign(e, props);
   for (const k of kids) e.append(k);
-  return e;
-}
-
-function svg(tag: string, attrs: Record<string, string>): SVGElement {
-  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
   return e;
 }
 
@@ -223,9 +218,9 @@ export class Overlay {
         : this.c("theme.ov.pill.running", { running: s.running, queued: s.queued });
     const pill = el(
       "button",
-      { className: `pill brk ${n ? "alert" : ""} ${s.paused ? "paused" : ""} ${this.arrived && !this.open ? "arrive" : ""}`, type: "button" },
+      { className: `pill ${n ? "alert" : ""} ${s.paused ? "paused" : ""} ${this.arrived && !this.open ? "arrive" : ""}`, type: "button" },
       mark(),
-      el("span", { className: `pip ${n || s.running ? "blink" : ""}` }),
+      el("span", { className: `lamp ${n ? "waiting" : s.paused ? "paused" : ""}` }),
       text,
     );
     this.arrived = false;
@@ -250,11 +245,11 @@ export class Overlay {
     const head = el(
       "div",
       { className: "head" },
-      el("div", {}, el("b", {}, mark(), el("span", { className: `pip ${s.needs.length ? "blink" : ""}` }), s.needs.length ? this.c("theme.ov.head.needs") : this.c("theme.ov.head.idle")), min),
+      el("div", {}, el("b", {}, mark(), el("span", { className: `lamp ${s.needs.length ? "waiting" : s.paused ? "paused" : ""}` }), s.needs.length ? this.c("theme.ov.head.needs") : this.c("theme.ov.head.idle")), min),
       el("div", {}, el("small", { textContent: sub }), button(s.paused ? this.c("theme.resume") : this.c("theme.pause"), () => void send({ type: "setPaused", paused: !s.paused }))),
     );
     const list = el("div", { className: "list" });
-    const panel = el("div", { className: `panel brk ${s.needs.length ? "hot" : ""}` }, head, list);
+    const panel = el("div", { className: `panel` }, head, list);
     panel.setAttribute("role", "region");
     panel.setAttribute("aria-label", "AIM-401k");
     if (!s.needs.length) list.append(el("div", { className: "empty", textContent: this.c("theme.ov.empty") }));
@@ -323,7 +318,7 @@ export class Overlay {
       actions.append(button(this.c("theme.ov.openTab"), go, "link"));
     } else if (need.kind === "review_submit") {
       actions.append(button(this.c("theme.ov.review"), go, "primary"));
-      actions.append(this.holdButton(() => void send({ type: "submitJob", jobId: need.jobId })));
+      actions.append(this.release(() => void send({ type: "submitJob", jobId: need.jobId })));
     } else {
       actions.append(button(this.c("theme.ov.openTab"), go, "primary"));
       if (need.kind === "stalled" || need.kind === "error") actions.append(button(this.c("theme.ov.retry"), () => void send({ type: "retryJob", jobId: need.jobId })));
@@ -334,80 +329,38 @@ export class Overlay {
     return card;
   }
 
-  /**
-   * "Submit for me" as press-and-hold: pointer or Space/Enter held for HOLD_MS
-   * fires; releasing early (or leaving the button) cancels. A plain click does nothing.
-   */
-  private holdButton(onFire: () => void): HTMLButtonElement {
-    const idle = this.c("theme.ov.hold");
-    const label = el("span", { textContent: idle });
-    const ring = svg("svg", { viewBox: "0 0 20 20", "aria-hidden": "true" });
-    ring.append(svg("circle", { class: "track", cx: "10", cy: "10", r: "8" }), svg("circle", { class: "prog", cx: "10", cy: "10", r: "8" }));
-    const b = el("button", { className: "b hold", type: "button" }, ring, label, el("span", { className: "bar" }));
-    b.style.setProperty("--hold", `${HOLD_MS}ms`);
-    b.title = idle;
-    b.setAttribute("aria-label", `${idle} (${(HOLD_MS / 1000).toFixed(1)}s)`);
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let fired = false;
-    const end = () => {
-      this.holding = false;
-      if (this.renderPending) {
-        this.renderPending = false;
-        this.render();
-      }
-    };
-    const start = () => {
-      if (fired || timer) return;
-      // Freeze the size: a shorter label would reflow the bottom-anchored panel and slide the button out from under the pointer.
-      if (!b.style.width) b.style.width = `${b.getBoundingClientRect().width}px`;
-      this.holding = true;
-      b.classList.add("arming");
-      label.textContent = this.c("theme.ov.holding");
-      timer = setTimeout(() => {
-        timer = null;
-        fired = true;
-        b.classList.remove("arming");
-        b.classList.add("fired");
-        label.textContent = this.c("theme.ov.released");
-        onFire();
-        setTimeout(end, 250);
-      }, HOLD_MS);
-    };
-    const cancel = () => {
-      if (fired || !timer) return;
-      clearTimeout(timer);
-      timer = null;
-      b.classList.remove("arming");
-      label.textContent = idle;
-      end();
-    };
-    const isFireKey = (e: KeyboardEvent) => e.key === " " || e.key === "Enter";
-    b.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      e.preventDefault(); // no text selection / long-press menu while holding
-      start();
+  /** Text for a copy key; falls back if the key is missing from the copy tables. */
+  private t(key: string, fallback: string): string {
+    const v = this.c(key as CopyKey);
+    return v === key ? fallback : v;
+  }
+
+  /** "Submit for me": lift the guard, then press and hold. A plain click does nothing. */
+  private release(onFire: () => void): HTMLElement {
+    const chud = this.state?.chud !== false;
+    const g = guardedRelease({
+      labels: {
+        guard: this.t("theme.ov.guard", chud ? "LIFT GUARD" : "Unlock submit"),
+        hold: this.c("theme.ov.hold"),
+        arming: this.c("theme.ov.holding"),
+        done: this.c("theme.ov.released"),
+        hint: this.t("theme.ov.guard.hint", "Lift the guard, then press and hold to release (submit) this application"),
+      },
+      onFire,
+      onHoldStart: () => {
+        // Freeze the size: a shorter label would reflow the bottom-anchored panel and slide the switch out from under the pointer.
+        const sw = g.querySelector<HTMLElement>(".guard-switch");
+        if (sw && !sw.style.minWidth) sw.style.minWidth = `${sw.getBoundingClientRect().width}px`;
+        this.holding = true;
+      },
+      onHoldEnd: () => {
+        this.holding = false;
+        if (this.renderPending) {
+          this.renderPending = false;
+          this.render();
+        }
+      },
     });
-    b.addEventListener("pointerup", cancel);
-    b.addEventListener("pointerleave", cancel);
-    b.addEventListener("pointercancel", cancel);
-    b.addEventListener("blur", cancel);
-    b.addEventListener("keydown", (e) => {
-      if (!isFireKey(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (!e.repeat) start();
-    });
-    b.addEventListener("keyup", (e) => {
-      if (!isFireKey(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      cancel();
-    });
-    b.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    });
-    b.addEventListener("contextmenu", (e) => e.preventDefault());
-    return b;
+    return g;
   }
 }
