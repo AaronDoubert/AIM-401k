@@ -686,6 +686,7 @@ body.popup { width: 360px; padding: 0; background-size: 24px 24px; }
 .tracker td textarea { display: block; min-height: 28px; height: 28px; font-size: 12px; line-height: 1.35; padding: 5px 7px; background: transparent; border-color: transparent; resize: none; overflow: hidden; }
 .tracker td textarea:hover { border-color: var(--line-2); }
 .tracker td textarea:focus { background: var(--well); height: 72px; overflow: auto; position: relative; z-index: 2; }
+.tracker td textarea:not(:focus) { white-space: nowrap; text-overflow: ellipsis; }
 .tracker td.go .row { flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
 .tracker td.go button { min-height: 24px; height: 24px; padding: 0 8px; font-size: 12.5px; }
 .tracker td.go button.danger { color: var(--muted); border-color: var(--line-2); }
