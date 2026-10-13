@@ -1,7 +1,8 @@
 import { fitToField, resolveField } from "../core/matcher";
 import type { ContentContext, DraftResult, NeedInput, PageState, ToBackground } from "../shared/messages";
 import { api } from "../shared/api";
-import type { NeedKind, PageMeta, UnitPhase, UnitState } from "../shared/types";
+import { clip } from "../shared/display";
+import type { FieldCheck, NeedKind, PageMeta, UnitPhase, UnitState } from "../shared/types";
 import { sleep } from "../shared/util";
 import { queryAll } from "./dom";
 import {
@@ -136,6 +137,23 @@ export class Autopilot {
     else this.unitTimer ??= setTimeout(fire, wait);
   }
 
+  /**
+   * Checklist for the counted fields of this step, in page order. Uses the
+   * `filled` key set the pass maintains, so it never rescans the DOM.
+   */
+  private reportFields(counted: ScannedField[], filled: Set<string>, needKeys: Set<string | undefined>): void {
+    try {
+      const fields: FieldCheck[] = counted.slice(0, 30).map((f) => {
+        const k = f.info.key;
+        const state: FieldCheck["state"] = needKeys.has(k) ? "need" : this.aiDrafted.has(k) ? "ai" : filled.has(k) ? "ok" : "todo";
+        return { label: clip(f.info.label || f.info.attrs || f.info.placeholder || "Field", 40), state };
+      });
+      this.unit({ fields });
+    } catch {
+      /* telemetry only */
+    }
+  }
+
   private get unitPhase(): UnitPhase {
     return this.unitState.phase;
   }
@@ -200,7 +218,10 @@ export class Autopilot {
     const useAi = settings.llmMode !== "off" && settings.hasApiKey;
     const counted = fields.filter((f) => f.info.required || settings.fillOptional);
     let done = counted.filter(isFilled).length;
+    const filled = new Set(counted.filter(isFilled).map((f) => f.info.key));
+    const noNeeds = new Set<string | undefined>();
     this.unit({ phase: "filling", fieldsTotal: counted.length, fieldsDone: done, currentField: "" });
+    this.reportFields(counted, filled, noNeeds);
 
     const askHuman = (f: ScannedField, kind: NeedKind, detail = "") => {
       for (const el of f.els) el.dataset.aim = "need";
@@ -237,7 +258,11 @@ export class Autopilot {
       if (r.type === "value" || r.type === "resume") {
         this.unit({ currentField: f.info.label || f.info.attrs });
         const ok = await fillField(f, r.type === "value" ? r.value : "", profile.resume);
-        if (ok) this.unit({ fieldsDone: ++done });
+        if (ok) {
+          this.unit({ fieldsDone: ++done });
+          filled.add(f.info.key);
+          this.reportFields(counted, filled, noNeeds);
+        }
         if (!ok && f.info.required) askHuman(f, "question", "Couldn't fill this automatically");
         continue;
       }
@@ -262,7 +287,9 @@ export class Autopilot {
         if (fitted && (await fillField(f, fitted, profile.resume))) {
           this.unit({ fieldsDone: ++done });
           this.aiDrafted.add(f.info.key);
+          filled.add(f.info.key);
           for (const el of f.els) el.dataset.aim = "ai";
+          this.reportFields(counted, filled, noNeeds);
           continue;
         }
         askHuman(f, "question", d.reason);
@@ -279,7 +306,10 @@ export class Autopilot {
       if (err && !neededKeys.has(f.info.key)) askHuman(f, "question", err);
     }
 
-    this.unit({ fieldsDone: counted.filter(isFilled).length });
+    const stillFilled = counted.filter(isFilled);
+    this.unit({ fieldsDone: stillFilled.length });
+    for (const f of stillFilled) filled.add(f.info.key);
+    this.reportFields(counted, filled, new Set(needs.map((n) => n.fieldKey)));
 
     if (needs.length) {
       this.unit({ phase: "holding" });
