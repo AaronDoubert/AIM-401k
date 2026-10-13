@@ -52,3 +52,4 @@
 .wr .usmap-clear:hover { color: var(--wr-bone, #f1ede4); }
 .wr .usmap-clear:focus-visible { outline: 1px solid var(--wr-bone, #f1ede4); outline-offset: 2px; }
 .wr .usmap-clear[hidden] { display: none; }
+[data-mode="plain"] .wr .usmap figcaption, [data-mode="plain"] .wr .usmap figcaption * { text-transform: none; }
