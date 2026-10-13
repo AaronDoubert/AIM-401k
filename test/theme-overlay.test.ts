@@ -50,7 +50,7 @@ describe("overlay hold-to-release", () => {
     o.update(state(true));
     expect(root().textContent).toContain("OPERATOR INPUT REQUIRED");
     expect(root().querySelectorAll("svg.mark").length).toBeGreaterThan(0); // the supplied mark, not a typed logo
-    expect(root().textContent).toContain("TGT · Acme Robotics · Platform Eng");
+    expect(root().textContent).toContain("Acme Robotics — Platform Eng");
     expect(cover().textContent).toContain("LIFT GUARD");
     expect(hold().textContent).toContain("HOLD TO RELEASE");
     expect(root().querySelector(".brk")).toBeNull();

@@ -67,6 +67,6 @@ describe("copy()", () => {
     expect(copy(true, "theme.tgt", { n: "0042" })).toBe("TGT-0042");
   });
   it("leaves unknown vars visible rather than blank", () => {
-    expect(copy(true, "theme.ov.job", { company: "ACME" })).toBe("TGT · ACME · {title}");
+    expect(copy(true, "theme.ov.job", { company: "ACME" })).toBe("ACME — {title}");
   });
 });

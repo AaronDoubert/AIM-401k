@@ -17,7 +17,7 @@
 .wr .usmap .pt:focus-visible .dot { stroke: var(--wr-bone, #f1ede4); }
 .wr .usmap .count {
   fill: var(--wr-muted, #a19d94); font: 600 12px var(--wr-mono, ui-monospace, monospace);
-  font-variant-numeric: tabular-nums; text-transform: uppercase; pointer-events: none;
+  font-variant-numeric: tabular-nums; pointer-events: none;
 }
 .wr .usmap .reticle { fill: none; stroke: var(--wr-bone, #f1ede4); stroke-width: 1.25; vector-effect: non-scaling-stroke; pointer-events: none; }
 .wr .usmap-foot {
