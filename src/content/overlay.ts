@@ -82,6 +82,10 @@ input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 13px; 
 input[type=checkbox]:checked { background-color: var(--fg); border-color: var(--fg);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l3 3 5-6' fill='none' stroke='%230c0c0b' stroke-width='2'/%3E%3C/svg%3E"); }
 .opts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.sugg { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.sugg-k { font-family: var(--cond); letter-spacing: .08em; color: var(--warn); margin-right: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+button.b.chip { font: 12px/1.3 var(--sans); letter-spacing: 0; text-transform: none; padding: 3px 7px; min-height: 0; font-weight: 400; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
 button.b { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; letter-spacing: .05em; line-height: 1.2;
   padding: 6px 11px; min-height: 30px; border-radius: 0; border: 1px solid var(--line-2); background: var(--panel); color: var(--fg); cursor: pointer; }
@@ -275,20 +279,28 @@ export class Overlay {
 
     if ((need.kind === "question" || need.kind === "signature") && need.inputType) {
       const remember = el("input", { type: "checkbox", checked: need.kind !== "signature" });
+      const first = need.suggestions?.[0]?.value ?? "";
       if (need.inputType === "choice" && need.options?.length) {
         const sel = el("select");
         sel.append(el("option", { value: "", textContent: "Choose…" }));
         for (const o of need.options) sel.append(el("option", { value: o, textContent: o }));
+        if (need.options.includes(first)) sel.value = first;
         card.append(sel);
+        this.suggest(card, need, (v) => (sel.value = v));
         actions.append(button(this.c("theme.ov.use"), () => sel.value && answer(sel.value, remember.checked), "primary"));
       } else if (need.inputType === "multi" && need.options?.length) {
         const box = el("div", { className: "opts" });
+        const picked = new Set(first.split(/\s*;\s*/));
         const checks = need.options.map((o) => {
-          const c = el("input", { type: "checkbox", value: o });
+          const c = el("input", { type: "checkbox", value: o, checked: picked.has(o) });
           box.append(el("label", { className: "rem" }, c, o));
           return c;
         });
         card.append(box);
+        this.suggest(card, need, (v) => {
+          const on = new Set(v.split(/\s*;\s*/));
+          for (const c of checks) c.checked = on.has(c.value);
+        });
         actions.append(
           button(this.c("theme.ov.use"), () => {
             const v = checks.filter((c) => c.checked).map((c) => c.value).join("; ");
@@ -299,7 +311,7 @@ export class Overlay {
         const input = need.inputType === "textarea" ? el("textarea") : el("input", { type: need.inputType === "date" ? "date" : "text" });
         input.placeholder = need.kind === "signature" ? "Type your full legal name to sign" : "Your answer";
         input.setAttribute("aria-label", need.prompt.slice(0, 120));
-        input.value = this.drafts.get(need.id) ?? "";
+        input.value = this.drafts.get(need.id) ?? first;
         input.addEventListener("input", () => this.drafts.set(need.id, input.value));
         input.addEventListener("keydown", (ev) => {
           const e = ev as KeyboardEvent;
@@ -307,9 +319,14 @@ export class Overlay {
           if (e.key === "Enter" && !(input instanceof HTMLTextAreaElement) && input.value.trim()) answer(input.value.trim(), remember.checked);
         });
         card.append(input);
+        this.suggest(card, need, (v) => {
+          input.value = v;
+          this.drafts.set(need.id, v);
+        });
         actions.append(button(need.kind === "signature" ? this.c("theme.ov.sign") : this.c("theme.ov.fill"), () => input.value.trim() && answer(input.value.trim(), remember.checked), "primary"));
       }
-      actions.append(el("label", { className: "rem" }, remember, this.c("theme.ov.remember")));
+      const rememberText = need.family?.sure ? this.c("theme.ov.rememberAs", { family: need.family.label }) : this.c("theme.ov.remember");
+      actions.append(el("label", { className: "rem" }, remember, rememberText));
       actions.append(button(this.c("theme.ov.openTab"), go, "link"));
     } else if (need.kind === "consent") {
       const remember = el("input", { type: "checkbox", checked: true });
@@ -327,6 +344,27 @@ export class Overlay {
     actions.append(button(this.c("theme.ov.skip"), () => void send({ type: "skipJob", jobId: need.jobId }), "link"));
     card.append(actions);
     return card;
+  }
+
+  /** "Suggested · why" under the answer box, plus one chip per alternative. */
+  private suggest(card: HTMLElement, need: Need, set: (value: string) => void): void {
+    const all = need.suggestions ?? [];
+    if (!all.length) return;
+    const why = el("span", { className: "why", textContent: all[0]!.why });
+    const box = el("div", { className: "sugg" }, el("span", { className: "sugg-k", textContent: this.c("theme.ov.suggested") }), why);
+    if (all.length > 1) {
+      const chips = el("div", { className: "chips" });
+      for (const s of all) {
+        const chip = button(s.value.length > 40 ? `${s.value.slice(0, 39)}…` : s.value, () => {
+          set(s.value);
+          why.textContent = s.why;
+        }, "chip");
+        chip.title = `${s.value}\n${s.why}`;
+        chips.append(chip);
+      }
+      box.append(chips);
+    }
+    card.append(box);
   }
 
   /** Text for a copy key; falls back if the key is missing from the copy tables. */

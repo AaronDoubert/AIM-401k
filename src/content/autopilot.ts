@@ -1,4 +1,5 @@
-import { fitToField, resolveField } from "../core/matcher";
+import { fitToField, resolveField, type FieldInfo, type JobCtx } from "../core/matcher";
+import type { SmartResult } from "../core/smart";
 import type { ContentContext, DraftResult, NeedInput, PageState, ToBackground } from "../shared/messages";
 import { api } from "../shared/api";
 import { clip } from "../shared/display";
@@ -44,6 +45,7 @@ export class Autopilot {
   private lastPassSig = "";
   private aiDrafted = new Set<string>();
   private drafts = new Map<string, DraftResult>();
+  private smartCache = new Map<string, SmartResult>();
   private lastReport = "";
   // War Room unit state (cosmetic telemetry; never allowed to break filling).
   private unitState: UnitReport = { phase: "recon", step: 1, fieldsTotal: 0, fieldsDone: 0, currentField: "" };
@@ -223,7 +225,7 @@ export class Autopilot {
     this.unit({ phase: "filling", fieldsTotal: counted.length, fieldsDone: done, currentField: "" });
     this.reportFields(counted, filled, noNeeds);
 
-    const askHuman = (f: ScannedField, kind: NeedKind, detail = "") => {
+    const askHuman = (f: ScannedField, kind: NeedKind, detail = "", smart?: SmartResult | null) => {
       for (const el of f.els) el.dataset.aim = "need";
       const isChoice = ["select", "radio", "combobox", "checkboxGroup"].includes(f.info.kind) && f.info.options.length > 0;
       needs.push({
@@ -246,6 +248,8 @@ export class Autopilot {
                   ? "textarea"
                   : "text",
         options: isChoice ? f.info.options : undefined,
+        suggestions: kind === "question" && smart?.suggestions.length ? smart.suggestions : undefined,
+        family: kind === "question" ? smart?.family : undefined,
       });
     };
 
@@ -270,9 +274,20 @@ export class Autopilot {
         if (f.info.required || r.kind === "signature") askHuman(f, r.kind);
         continue;
       }
-      // unknown
+      // unknown: try question families / similar saved answers (local, no LLM)
+      const smart = f.info.kind === "file" || f.info.kind === "checkbox" ? null : await this.smart(f.info, jobCtx);
+      if (smart?.value) {
+        this.unit({ currentField: f.info.label || f.info.attrs });
+        if (await fillField(f, smart.value, profile.resume)) {
+          this.unit({ fieldsDone: ++done });
+          filled.add(f.info.key);
+          this.reportFields(counted, filled, noNeeds);
+          continue;
+        }
+      }
       if (!f.info.required) continue;
-      if (useAi && f.info.kind !== "file" && f.info.kind !== "checkbox") {
+      // The LLM is only asked when nothing local has a guess.
+      if (useAi && !smart?.suggestions.length && f.info.kind !== "file" && f.info.kind !== "checkbox") {
         this.unit({ currentField: f.info.label || f.info.attrs });
         let d = this.drafts.get(f.info.key);
         if (!d) {
@@ -292,10 +307,10 @@ export class Autopilot {
           this.reportFields(counted, filled, noNeeds);
           continue;
         }
-        askHuman(f, "question", d.reason);
+        askHuman(f, "question", d.reason, smart);
         continue;
       }
-      askHuman(f, f.info.kind === "checkbox" ? "consent" : "question");
+      askHuman(f, f.info.kind === "checkbox" ? "consent" : "question", "", smart);
     }
 
     // Surface validation errors on fields we thought were fine.
@@ -384,6 +399,23 @@ export class Autopilot {
   }
 
   /** The human answered a question from the overlay/popup. */
+  /** Local second pass in the background (where the embedding model lives), cached per field and answer bank. */
+  private async smart(field: FieldInfo, ctx: JobCtx): Promise<SmartResult | null> {
+    const bank = this.ctx.answers;
+    const key = `${field.key}|${field.label}|${field.options.join("|")}|${bank.length}|${bank[0]?.updatedAt ?? 0}`;
+    const hit = this.smartCache.get(key);
+    if (hit) return hit;
+    try {
+      const r = (await send({ type: "smart", field, ctx })) as SmartResult | { error: string } | undefined;
+      if (!r || "error" in r) return null;
+      if (this.smartCache.size > 500) this.smartCache.clear();
+      this.smartCache.set(key, r);
+      return r;
+    } catch {
+      return null;
+    }
+  }
+
   async applyAnswer(fieldKey: string, value: string, kind: NeedKind): Promise<boolean> {
     const f = scanFields().find((x) => x.info.key === fieldKey);
     if (!f) return false;

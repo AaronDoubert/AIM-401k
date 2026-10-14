@@ -320,6 +320,10 @@ body.wr {
 .wr .need .wr-btn.primary { background: transparent; border-color: var(--wr-bone); color: var(--wr-bone); }
 .wr .need .wr-btn.primary:hover:not(:disabled) { background: rgba(241, 237, 228, 0.08); }
 .need-multi { display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow: auto; }
+.need-sugg { font-size: 12px; color: var(--wr-muted); }
+.need-sugg-k { font: 500 10.5px/1 var(--wr-mono); letter-spacing: 0.06em; margin-right: 8px; color: var(--wr-bone); }
+.need-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.wr .need .wr-btn.chip { font: 12px/1.3 var(--wr-sans); letter-spacing: 0; text-transform: none; padding: 3px 8px; min-height: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wr .wr-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--wr-muted); cursor: pointer; }
 .wr .wr-check input { width: auto; margin: 0; accent-color: var(--wr-bone); }
 /* "Remember" is a small toggle, not a browser checkbox. */

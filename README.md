@@ -132,7 +132,7 @@ The full list of network endpoints the extension can contact is in [docs/FIREFOX
 
 ## AI providers (optional)
 
-Without AI, AIM-401k still fills everything your profile and saved answers cover, and asks you for the rest. With AI connected, it can draft answers to open-ended questions ("Why do you want to work here?") and read your resume more accurately.
+Without AI, AIM-401k still fills everything your profile and saved answers cover, and asks you for the rest, with its best local guess already filled in. It recognizes the same question in different wordings ("Discipline", "Major", "What are you majoring in?") with a small embedding model that runs inside the extension, so one saved answer covers every wording, and answering a question once also answers it in your other open applications. The AI is only asked when nothing local has a guess. With AI connected, it can draft answers to open-ended questions ("Why do you want to work here?") and read your resume more accurately.
 
 | Provider | Sign in with | Cost | Get a key |
 |---|---|---|---|
@@ -200,7 +200,9 @@ The manifest declares both `background.scripts` (used by Firefox) and `backgroun
                          1. confirmation page?  → mark Applied, close tab
                          2. no form?            → click "Apply" / detect a sign-in wall
                          3. scan fields → resolve each:
-                              section entry (Work Experience N) ▸ saved answer ▸ profile rule ▸ AI draft ▸ ask you
+                              section entry (Work Experience N) ▸ saved answer ▸ profile rule
+                              ▸ question family / similar saved answer (local embeddings, in background)
+                              ▸ AI draft (only if no local guess) ▸ ask you, with suggestions pre-filled
                          4. fill (React-safe events, file upload, custom dropdowns, dates in any format)
                          5. all filled → click Next … → final step:
                               autoSubmit off (default) → "Ready to review and submit"
@@ -210,6 +212,7 @@ The manifest declares both `background.scripts` (used by Firefox) and `backgroun
 
 - **Reliability.** State lives in `storage.local`, and every write goes through one serialized writer in the background. Each pass of the content script is idempotent and re-runs when the page changes. A step guard stops it from clicking Next forever, and a watchdog flags jobs that stop making progress. After a browser restart, in-flight jobs are re-queued.
 - **Dates.** Native date pickers, typed formats (the `MM/DD/YYYY`-style hint is read from the placeholder or label), Month/Day/Year dropdowns, Workday-style split boxes, and read-only calendar inputs. Start dates come from your earliest start date or notice period, and a "Date" field next to a signature gets today's date.
+- **Question families.** `src/core/families.ts` lists the questions behind the wordings ("previous employer", "in-office days", "worked here before"…), each with example wordings, details read from the wording (which past job, how many days, which country) and how to answer it from the profile. `src/core/smart.ts` recognizes a family by pattern, then by meaning with [potion-base-8M](https://huggingface.co/minishlab/potion-base-8M) (a Model2Vec static embedding model: a token lookup and an average, ~0.02 ms per question, 7.7 MB int8 in `static/models/`, regenerated with `scripts/make-m2v.mjs`). Saved answers carry their family, so they cover every wording, and they become examples of it. "Yes" to 4 office days covers 3; per-company questions are kept per company. Only certain matches fill; the rest are suggestions on the card. Thresholds are pinned by held-out wordings in `test/smart.test.ts`.
 - **Copy.** Every themed string has a plain variant in `src/shared/copy.ts` and `src/shared/copy/*.ts`. Internals keep plain names (`needs_you`, `submitted`, …).
 
 ### Project layout
