@@ -88,12 +88,47 @@ export interface Profile {
   resume: ResumeFile | null;
 }
 
+/** Details in a question's wording that change its answer (see core/families.ts). */
+export interface Slots {
+  /** Position in work history: 0 = most recent. */
+  ordinal?: number;
+  /** In-office days per week the question asks about. */
+  days?: number;
+  /** Travel percentage the question asks about. */
+  percent?: number;
+  /** Country the question is about (canonical, normalized). */
+  country?: string;
+}
+
+/** A candidate answer offered on a question card. */
+export interface Suggestion {
+  value: string;
+  /** Where it came from, shown under the answer box. */
+  why: string;
+}
+
+/** The question family a field was recognized as (what "Remember" saves it under). */
+export interface FamilyRef {
+  id: string;
+  label: string;
+  slots: Slots;
+  /** Recognized with certainty (pattern, or a clear model match). */
+  sure: boolean;
+  /** Set for families whose answer differs per company. */
+  company?: string;
+}
+
 export interface AnswerEntry {
   id: string;
   question: string;
   answer: string;
   source: "user" | "ai";
   updatedAt: number;
+  /** Question family this answers (core/families.ts): it then covers every wording of that question. */
+  family?: string;
+  slots?: Slots;
+  /** Employer it was given for, for families whose answer differs per company. */
+  company?: string;
 }
 
 export type LlmMode = "off" | "draft" | "auto";
@@ -291,6 +326,9 @@ export interface Need {
   fieldKey?: string;
   inputType?: "text" | "textarea" | "choice" | "multi" | "date";
   options?: string[];
+  /** Local best guesses, best first (pre-filled on the card). */
+  suggestions?: Suggestion[];
+  family?: FamilyRef;
   createdAt: number;
 }
 

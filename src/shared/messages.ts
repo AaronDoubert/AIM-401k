@@ -1,3 +1,4 @@
+import type { FieldInfo, JobCtx } from "../core/matcher";
 import type { AnswerEntry, IntelItem, IntelSource, Job, Need, NeedKind, OpsEvent, PageMeta, Profile, ProviderId, RawMail, Settings, UnitState } from "./types";
 
 /** Fields the tracker, board and spreadsheet import may edit on a job. */
@@ -11,6 +12,8 @@ export interface NeedInput {
   fieldKey?: string;
   inputType?: Need["inputType"];
   options?: string[];
+  suggestions?: Need["suggestions"];
+  family?: Need["family"];
 }
 
 export type PageState =
@@ -57,6 +60,8 @@ export type ToBackground =
   | { type: "report"; jobId: string; state: PageState; needs: NeedInput[]; meta?: PageMeta; note?: string; aiDrafted?: number }
   | { type: "progress"; jobId: string; msg: string }
   | { type: "draft"; req: DraftRequest }
+  /** Local second pass (question families + embeddings) for a field the rules missed. */
+  | { type: "smart"; field: FieldInfo; ctx: JobCtx }
   | { type: "getOverlayState" }
   | { type: "answerNeed"; needId: string; value: string; remember: boolean }
   | { type: "dismissNeed"; needId: string }

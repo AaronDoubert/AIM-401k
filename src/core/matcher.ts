@@ -76,13 +76,23 @@ const COUNTRIES = [
 ];
 const US_ALIASES = ["united states", "u s", "usa", "america", "united states of america"];
 
+const canonCountry = (c: string): string => (US_ALIASES.includes(c) ? "united states" : c);
+
+/** Countries named in a normalized label, canonicalized ("usa" → "united states"). */
+export function countriesIn(label: string): string[] {
+  const padded = ` ${label} `;
+  return [...new Set(COUNTRIES.filter((c) => padded.includes(` ${c} `)).map(canonCountry))];
+}
+
+/** The country a question is about: the one it names, else the user's own. */
+export function questionCountry(label: string, p: Profile): string {
+  return countriesIn(label)[0] ?? canonCountry(norm(p.country || "united states"));
+}
+
 /** Work-eligibility answers only hold for the user's own country. */
 const sameCountry = (label: string, p: Profile): boolean => {
-  const mine = norm(p.country || "united states");
-  const mineAliases = US_ALIASES.includes(mine) ? US_ALIASES : [mine];
-  const padded = ` ${label} `;
-  const mentioned = COUNTRIES.filter((c) => padded.includes(` ${c} `));
-  return mentioned.length === 0 || mentioned.some((c) => mineAliases.includes(c));
+  const mentioned = countriesIn(label);
+  return mentioned.length === 0 || mentioned.includes(canonCountry(norm(p.country || "united states")));
 };
 
 const yn = (v: string): string => (v === "yes" ? "Yes" : v === "no" ? "No" : "");
@@ -268,6 +278,14 @@ const AUTOCOMPLETE: Record<string, ValueFn> = {
 const SIGNATURE_RE = /\b(e ?)?signature\b|sign (your name|here|below)|type your (full )?(legal )?name to sign|electronically sign/;
 const CONSENT_RE = /\b(i )?(certify|attest|acknowledge|agree|consent|understand|confirm|accept)\b|terms (of|and)|privacy (policy|notice)|true and (complete|accurate)/;
 const RESUME_RE = /resume|résumé|\bcv\b|curriculum/;
+
+/** A profile rule's answer for a field, by rule id, honoring the rule's kind and guard. */
+export function ruleValue(id: string, field: FieldInfo, p: Profile, ctx: JobCtx): string {
+  const r = RULES.find((x) => x.id === id);
+  if (!r || (r.kinds && !r.kinds.includes(field.kind))) return "";
+  if (r.guard && !r.guard(norm(cleanLabel(field.label)), p)) return "";
+  return r.value(p, ctx, field);
+}
 
 export function matchRule(field: FieldInfo, profile: Profile): Rule | null {
   const label = norm(cleanLabel(field.label));

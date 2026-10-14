@@ -25,6 +25,8 @@ import {
   toTab,
 } from "./core";
 import { getState, mutate, type State } from "./store";
+import { rememberedEntry, settledNeeds } from "../core/smart";
+import { smartResolve } from "./smart";
 import { draftAnswer, parseResumeWithAi } from "./tasks";
 // Feature modules register their own handlers / listeners on import.
 import "./data";
@@ -154,30 +156,40 @@ async function handle(msg: ToBackground, sender: Sender): Promise<unknown> {
       return draftAnswer(msg.req, s.profile, s.answers, s.settings);
     }
 
+    case "smart": {
+      const s = await getState();
+      return smartResolve(msg.field, msg.ctx, s.profile, s.answers);
+    }
+
     case "answerNeed": {
-      let target: { tabId: number; frameId: number; msg: ToContent } | null = null;
+      const targets: { tabId: number; frameId: number; msg: ToContent }[] = [];
       await mutate((s) => {
         const need = s.needs.find((n) => n.id === msg.needId);
         if (!need) return;
-        if (msg.remember && need.fieldKey && ["question", "consent", "signature"].includes(need.kind)) {
-          s.answers = upsertAnswer(s.answers, { id: uid("ans_"), question: need.prompt, answer: msg.value, source: "user", updatedAt: Date.now() });
-        }
-        s.needs = s.needs.filter((n) => n.id !== need.id);
-        const job = s.jobs.find((j) => j.id === need.jobId);
-        if (job) {
+        const settle = (n: Need, value: string, how: string) => {
+          s.needs = s.needs.filter((x) => x.id !== n.id);
+          const job = s.jobs.find((j) => j.id === n.jobId);
+          if (!job) return;
           job.status = statusFromNeeds(s, job.id);
           job.lastProgressAt = Date.now();
-          log(job, `You answered: ${need.prompt}`);
-          emit("intervened", { job, what: need.prompt });
-          if (job.tabId != null && need.fieldKey) {
-            target = { tabId: job.tabId, frameId: need.frameId, msg: { type: "applyAnswer", fieldKey: need.fieldKey, value: msg.value, kind: need.kind } };
+          log(job, `${how}: ${n.prompt}`);
+          emit("intervened", { job, what: n.prompt });
+          if (job.tabId != null && n.fieldKey) {
+            targets.push({ tabId: job.tabId, frameId: n.frameId, msg: { type: "applyAnswer", fieldKey: n.fieldKey, value, kind: n.kind } });
           }
+        };
+        let remembered = false;
+        if (msg.remember && need.fieldKey && ["question", "consent", "signature"].includes(need.kind)) {
+          const base = { id: uid("ans_"), question: need.prompt, answer: msg.value, source: "user" as const, updatedAt: Date.now() };
+          const entry = rememberedEntry(need, msg.value, base);
+          s.answers = upsertAnswer(s.answers, entry);
+          remembered = !!entry.family;
         }
+        settle(need, msg.value, "You answered");
+        // One answer to a question family settles the same question waiting in other tabs.
+        if (remembered) for (const { need: other, value } of settledNeeds(s.needs, s.answers)) settle(other, value, "Answered from your saved answer");
       });
-      if (target) {
-        const t = target as { tabId: number; frameId: number; msg: ToContent };
-        void toTab(t.tabId, t.msg, t.frameId);
-      }
+      for (const t of targets) void toTab(t.tabId, t.msg, t.frameId);
       broadcast();
       return true;
     }
@@ -422,6 +434,7 @@ const FROM_CONTENT = new Set<ToBackground["type"]>([
   "report",
   "progress",
   "draft",
+  "smart",
   "unit",
   "getOverlayState",
   "answerNeed",

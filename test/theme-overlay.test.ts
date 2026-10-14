@@ -118,3 +118,55 @@ describe("overlay hold-to-release", () => {
     expect(btn.isConnected).toBe(false); // the deferred render ran on release
   });
 });
+
+describe("overlay question suggestions", () => {
+  const question = (): OverlayState => ({
+    ...state(true),
+    needs: [
+      {
+        id: "q1",
+        jobId: "j1",
+        kind: "question",
+        prompt: "Please list your previous employer",
+        frameId: 0,
+        fieldKey: "k1",
+        inputType: "text",
+        createdAt: 0,
+        suggestions: [
+          { value: "Babbage & Co", why: "Past employer · From your work history" },
+          { value: "Analytical Engines", why: "Your answer to \"Most recent employer\"" },
+        ],
+        family: { id: "employer_n", label: "Past employer", slots: { ordinal: 1 }, sure: true },
+      },
+    ],
+  });
+
+  it("pre-fills the best suggestion, says why, and offers the rest as chips", () => {
+    new Overlay().update(question());
+    const input = root().querySelector<HTMLInputElement>(".card input[type=text]")!;
+    expect(input.value).toBe("Babbage & Co");
+    expect(root().querySelector(".sugg .why")!.textContent).toBe("Past employer · From your work history");
+    expect(root().textContent).toContain("remember as Past employer");
+    const chips = [...root().querySelectorAll<HTMLButtonElement>("button.chip")];
+    expect(chips.map((c) => c.textContent)).toEqual(["Babbage & Co", "Analytical Engines"]);
+    chips[1]!.click();
+    expect(input.value).toBe("Analytical Engines");
+    expect(root().querySelector(".sugg .why")!.textContent).toContain("Most recent employer");
+  });
+
+  it("pre-selects a suggested option", () => {
+    const s = question();
+    s.needs[0] = {
+      ...s.needs[0]!,
+      inputType: "choice",
+      options: ["Yes", "No"],
+      suggestions: [{ value: "No", why: "You prefer remote work" }],
+      family: { id: "onsite_days", label: "In-office days", slots: { days: 4 }, sure: false },
+    };
+    new Overlay().update(s);
+    // A guessed family isn't promised: the answer is only filed under it if the suggestion is taken.
+    expect(root().textContent).not.toContain("remember as");
+    expect(root().querySelector<HTMLSelectElement>(".card select")!.value).toBe("No");
+    expect(root().querySelectorAll("button.chip").length).toBe(0);
+  });
+});

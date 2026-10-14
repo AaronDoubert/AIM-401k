@@ -219,23 +219,52 @@ export class TrackView {
       return { box: c, el: h("label", { className: "wr-check" }, c, h("span", { textContent: label })) };
     };
 
+    // Local best guesses: the first is pre-filled, the rest are one click away.
+    const suggest = (set: (value: string) => void) => {
+      const all = need.suggestions ?? [];
+      if (!all.length) return;
+      const why = h("span", { className: "need-why", textContent: all[0]!.why });
+      const box = h("div", { className: "need-sugg" }, h("span", { className: "need-sugg-k", textContent: t("warroom.need.suggested") }), why);
+      if (all.length > 1) {
+        const chips = h("div", { className: "need-chips" });
+        for (const s of all) {
+          const chip = btn(s.value.length > 40 ? `${s.value.slice(0, 39)}…` : s.value, () => {
+            set(s.value);
+            why.textContent = s.why;
+          }, "chip");
+          chip.title = `${s.value}\n${s.why}`;
+          chips.append(chip);
+        }
+        box.append(chips);
+      }
+      card.append(box);
+    };
+
     if ((need.kind === "question" || need.kind === "signature") && need.inputType) {
-      const remember = check(t("warroom.need.remember"), need.kind !== "signature");
+      const remember = check(need.family?.sure ? t("warroom.need.rememberAs", { family: need.family.label }) : t("warroom.need.remember"), need.kind !== "signature");
+      const first = need.suggestions?.[0]?.value ?? "";
       if (need.inputType === "choice" && need.options?.length) {
         const sel = h("select", { className: "wr-input" });
         sel.append(h("option", { value: "", textContent: t("warroom.need.choose") }));
         for (const o of need.options) sel.append(h("option", { value: o, textContent: o }));
+        if (need.options.includes(first)) sel.value = first;
         card.append(sel);
+        suggest((v) => (sel.value = v));
         row.append(btn(t("warroom.need.fill"), () => sel.value && answer(sel.value, remember.box.checked), "primary"));
       } else if (need.inputType === "multi" && need.options?.length) {
         const box = h("div", { className: "need-multi" });
+        const picked = new Set(first.split(/\s*;\s*/));
         const checks = need.options.map((o) => {
-          const c = check(o, false, false);
+          const c = check(o, picked.has(o), false);
           box.append(c.el);
           c.box.value = o;
           return c.box;
         });
         card.append(box);
+        suggest((v) => {
+          const on = new Set(v.split(/\s*;\s*/));
+          for (const c of checks) c.checked = on.has(c.value);
+        });
         row.append(
           btn(t("warroom.need.fill"), () => {
             const v = checks.filter((c) => c.checked).map((c) => c.value).join("; ");
@@ -245,7 +274,7 @@ export class TrackView {
       } else {
         const input = need.inputType === "textarea" ? h("textarea", { className: "wr-input", rows: 3 }) : h("input", { className: "wr-input", type: need.inputType === "date" ? "date" : "text" });
         input.placeholder = t(need.kind === "signature" ? "warroom.need.sign_placeholder" : "warroom.need.placeholder");
-        input.value = drafts.get(need.id) ?? "";
+        input.value = drafts.get(need.id) ?? first;
         input.setAttribute("aria-label", need.prompt);
         input.addEventListener("input", () => drafts.set(need.id, input.value));
         const submit = () => input.value.trim() && answer(input.value.trim(), remember.box.checked);
@@ -258,6 +287,10 @@ export class TrackView {
           }
         });
         card.append(input);
+        suggest((v) => {
+          input.value = v;
+          drafts.set(need.id, v);
+        });
         row.append(btn(t(need.kind === "signature" ? "warroom.need.sign" : "warroom.need.fill"), submit, "primary"));
       }
       row.append(remember.el);

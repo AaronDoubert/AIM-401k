@@ -252,6 +252,8 @@ export function replaceNeeds(s: State, jobId: string, frameId: number, inputs: N
     const prev = old.find((n) => sameAs(n, i));
     if (prev) {
       prev.detail = i.detail;
+      prev.suggestions = i.suggestions;
+      prev.family = i.family;
       kept.push(prev);
     } else {
       const n: Need = { ...i, id: uid("need_"), jobId, frameId, createdAt: Date.now() };
